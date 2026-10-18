@@ -25,12 +25,11 @@ import markdown
 import yaml
 from pygments.formatters import HtmlFormatter
 
-from learnkb.check import CURRICULUM, LINK, NO_KB, Page, Report, check, load_pages, read_json
+from learnkb.check import (CODE, CURRICULUM, LINK, NO_KB, Page, Report, check, check_links, load_pages,
+                           read_json, yaml_error)
 from learnkb.ingest import KB, MANIFEST, ROOT
 
 SITE = ROOT / "site"
-LESSONS = KB / "lessons"
-QUIZZES = KB / "quizzes"
 ASSETS = Path(__file__).parent / "site_assets"
 FOLDER = {"topic": "topics", "concept": "concepts", "source": "sources"}
 SECTION_ICONS = {"overview": "◎", "walkthrough": "➜", "common pitfalls": "⚠", "summary": "✓"}
@@ -62,6 +61,21 @@ def resolve_links(md: str, pages: dict[str, Page], prefix: str) -> str:
 
 
 LIST_ITEM = re.compile(r"^(?:[-*+]|\d+\.)\s")
+PLACEHOLDER = re.compile(r"<(/?)([A-Za-z][\w.-]*)((?: [^<>\n]*)?)>")
+HTML_TAGS = {"a", "abbr", "b", "br", "code", "div", "em", "i", "img", "kbd", "li", "mark", "ol", "p",
+             "pre", "small", "span", "strong", "sub", "sup", "table", "td", "th", "tr", "u", "ul"}
+
+
+def escape_placeholders(md: str) -> str:
+    """Show <commit>, <paths> and the like as text; Markdown would pass them through as HTML tags."""
+    def repl(m: re.Match) -> str:
+        return m.group(0) if m.group(2).lower() in HTML_TAGS else "&lt;" + m.group(0)[1:-1] + "&gt;"
+
+    out, last = [], 0
+    for code in CODE.finditer(md):
+        out += [PLACEHOLDER.sub(repl, md[last:code.start()]), code.group(0)]
+        last = code.end()
+    return "".join(out) + PLACEHOLDER.sub(repl, md[last:])
 
 
 def separate_lists(md: str) -> str:
@@ -80,7 +94,7 @@ def separate_lists(md: str) -> str:
 
 def render_md(md: str, pages: dict[str, Page], prefix: str) -> str:
     out = markdown.markdown(
-        resolve_links(separate_lists(md), pages, prefix),
+        escape_placeholders(resolve_links(separate_lists(md), pages, prefix)),
         extensions=["fenced_code", "tables", "codehilite", "sane_lists"],
         extension_configs={"codehilite": {"guess_lang": False, "css_class": "hl"}},
     )
@@ -126,21 +140,41 @@ def minutes(page: Page, lesson: dict | None) -> int:
 # ---------------------------------------------------------------- lessons
 
 
-def load_lesson(slug: str, report: Report) -> dict | None:
-    path = LESSONS / f"{slug}.yaml"
+def strings(data) -> list[str]:
+    """Every string in a parsed YAML document, for link checks."""
+    if isinstance(data, dict):
+        return [s for v in data.values() for s in strings(v)]
+    if isinstance(data, list):
+        return [s for v in data for s in strings(v)]
+    return [data] if isinstance(data, str) else []
+
+
+def load_yaml(rel: str, pages: dict[str, Page], report: Report) -> dict | None:
+    path = KB / rel
     if not path.exists():
         return None
     try:
-        lesson = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text()) or {}
     except yaml.YAMLError as exc:
-        report.error(f"lessons/{slug}.yaml: invalid YAML: {exc}")
+        report.error(f"{rel}: {yaml_error(exc)}")
         return None
+    check_links(rel, "\n".join(strings(data)), pages, report)
+    return data
+
+
+def load_lesson(slug: str, pages: dict[str, Page], report: Report) -> dict | None:
     rel = f"lessons/{slug}.yaml"
+    lesson = load_yaml(rel, pages, report)
+    if lesson is None:
+        return None
     if lesson.get("topic") != slug:
         report.error(f"{rel}: 'topic' should be '{slug}'")
     for i, node in enumerate(lesson.get("flow", {}).get("nodes", [])):
         if "label" not in node:
             report.error(f"{rel}: flow node {i} needs a label")
+    if any(not str(a).strip() for a in lesson.get("flow", {}).get("arrows", [])):
+        report.warn(f"{rel}: flow has empty arrow labels; name each transition, or drop the diagram "
+                    "if the nodes are alternatives rather than steps")
     for i, step in enumerate(lesson.get("walkthrough", {}).get("steps", [])):
         if not step.get("explain"):
             report.error(f"{rel}: walkthrough step {i + 1} needs 'explain'")
@@ -204,15 +238,10 @@ def render_checks(checks: list, pages, prefix) -> str:
 # ---------------------------------------------------------------- quizzes
 
 
-def load_quiz(slug: str, n_objectives: int, report: Report) -> dict | None:
-    path = QUIZZES / f"{slug}.yaml"
-    if not path.exists():
-        return None
+def load_quiz(slug: str, n_objectives: int, pages: dict[str, Page], report: Report) -> dict | None:
     rel = f"quizzes/{slug}.yaml"
-    try:
-        quiz = yaml.safe_load(path.read_text()) or {}
-    except yaml.YAMLError as exc:
-        report.error(f"{rel}: invalid YAML: {exc}")
+    quiz = load_yaml(rel, pages, report)
+    if quiz is None:
         return None
     if quiz.get("topic") != slug:
         report.error(f"{rel}: 'topic' should be '{slug}'")
@@ -262,7 +291,9 @@ def render_question(n: int, q: dict, pages, prefix) -> str:
         body = (f'<textarea class="q-answer" rows="4" aria-label="Your answer to question {n}" '
                 f'placeholder="Answer in your own words…"></textarea>'
                 f'<div class="q-model"><h3>Model answer</h3>{render_md(str(q["answer"]), pages, prefix)}'
-                f'<p class="q-hint">Tick each point your answer covered:</p><ul class="points">{points}</ul></div>')
+                f'<p class="q-hint">Tick each point your answer covered:</p><ul class="points">{points}'
+                f'<li class="point-none"><label><input type="checkbox" data-none>'
+                f'<span>None of these</span></label></li></ul></div>')
     else:
         multi = sum(bool(o.get("correct")) for o in q["options"]) > 1
         itype = "checkbox" if multi else "radio"
@@ -562,6 +593,14 @@ def code_css() -> str:
             ".hl, .hl pre { background: transparent !important; }\n")
 
 
+def load_extras(pages: dict[str, Page], order: list[str], report: Report) -> tuple[dict, dict]:
+    """Load and validate every topic's lesson and quiz files."""
+    lessons = {t: lesson for t in order if (lesson := load_lesson(t, pages, report))}
+    quizzes = {t: quiz for t in order if t in pages
+               and (quiz := load_quiz(t, len(objectives(pages[t])), pages, report))}
+    return lessons, quizzes
+
+
 def build(only: list[str] | None = None) -> int:
     if not CURRICULUM.exists():
         print(NO_KB)
@@ -571,9 +610,7 @@ def build(only: list[str] | None = None) -> int:
     curriculum = read_json(CURRICULUM)
     check(pages, read_json(MANIFEST), curriculum, report)
     order = [t for m in curriculum.get("modules", []) for t in m["topics"]]
-    lessons = {t: lesson for t in order if (lesson := load_lesson(t, report))}
-    quizzes = {t: quiz for t in order if t in pages
-               and (quiz := load_quiz(t, len(objectives(pages[t])), report))}
+    lessons, quizzes = load_extras(pages, order, report)
     for slug in only or []:
         if slug not in order:
             report.error(f"unknown topic '{slug}'")
@@ -589,7 +626,7 @@ def build(only: list[str] | None = None) -> int:
             backlinks.setdefault(target, []).append(p.slug)
 
     for msg in report.warnings:
-        if msg.startswith("quizzes/"):
+        if msg.startswith(("quizzes/", "lessons/")):
             print(f"WARN   {msg}")
 
     if not only:

@@ -68,7 +68,9 @@ learner chose, or what they wrote and which key points they ticked.
 
 1. Read `kb/quizzes/<slug>.yaml`, the topic page and the relevant concept pages. Grade
    against those, not against outside knowledge.
-2. **Re-grade the open answers.** Learners often mark themselves too high or too low.
+2. **Re-grade the open answers.** Learners often mark themselves too high or too low, or
+   skip it: an answer marked "Not graded yet" was left out of the page's score, so the
+   pasted score and objective statuses are only provisional.
    Compare each written answer with the model answer and its points. Say which points it
    really covers, and quote the learner's own words when a point is missing or wrong.
 3. **Diagnose, don't just list.** Group the mistakes into misconceptions, for example
@@ -147,7 +149,7 @@ questions:
 ```
 
 **YAML gotchas:**
-- A one-line value that contains `": "`, or that starts with a backtick, `[`, `{` or `*`,
-  must be quoted or written as a `|` block, or the build fails.
+- A one-line value that contains `": "`, or that starts with a backtick, `[`, `{`, `*`, `@`
+  or `?`, must be double-quoted or written as a `|` block, or the build fails.
 - Bare `yes`, `no`, `on`, `off` and numbers become booleans or numbers. Quote option
   text like `"No"`.

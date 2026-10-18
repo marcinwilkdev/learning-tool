@@ -275,6 +275,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .q-answer:disabled { opacity: .85; }
 .good { color: var(--good); }
 .partial { color: var(--warn); }
+.pending { color: var(--muted); font-weight: 500; }
+.point-none span { color: var(--muted); font-style: italic; }
 .bad { color: var(--accent-text); }
 .quiz-submit { margin-top: 28px; text-align: center; }
 .quiz-submit p { margin: 10px 0 0; font-size: .88rem; }

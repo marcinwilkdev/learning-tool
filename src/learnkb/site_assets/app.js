@@ -178,8 +178,10 @@
 
   // ---------- quiz ----------
   // Choice questions are graded all-or-nothing; open questions score the share of
-  // rubric points the learner ticks. Objectives averaging >= 80% count as mastered
-  // and are ticked on the topic page.
+  // rubric points the learner ticks. An open answer with nothing ticked (and not
+  // "None of these") isn't graded yet, so it's left out of the score instead of
+  // counting as zero. Objectives averaging >= 80% count as mastered and are ticked
+  // on the topic page.
   document.querySelectorAll("[data-quiz]").forEach((form) => {
     const slug = form.dataset.quiz;
     const qs = [...form.querySelectorAll(".question")];
@@ -204,45 +206,63 @@
       const n = qs.filter((q) => !answered(q)).length;
       unanswered.textContent = n ? `${n} question${n > 1 ? "s" : ""} unanswered` : "All questions answered";
     }
+    // A number from 0 to 1, or null for an open answer the learner hasn't graded yet.
     function score(q) {
       if (isOpen(q)) {
         const pts = [...q.querySelectorAll("[data-point]")];
-        return pts.filter((p) => p.checked).length / pts.length;
+        const ticked = pts.filter((p) => p.checked).length;
+        if (ticked) return ticked / pts.length;
+        return q.querySelector("[data-none]").checked || !answered(q) ? 0 : null;
       }
       return [...q.querySelectorAll(".opt")].every((o) => o.querySelector("input").checked === (o.dataset.correct === "1")) ? 1 : 0;
     }
     const status = (s) => s >= 0.8 ? ["Solid", "good"] : s >= 0.5 ? ["Shaky", "partial"] : ["Review", "bad"];
 
+    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
     function grade() {
       const scores = qs.map(score);
+      const graded = scores.filter((s) => s !== null);
+      const pending = scores.length - graded.length;
       qs.forEach((q, i) => {
         const v = q.querySelector(".q-verdict");
         const s = scores[i];
-        if (isOpen(q)) {
+        if (s === null) {
+          v.textContent = "Not graded yet: tick the points you covered";
+          v.className = "q-verdict pending";
+        } else if (isOpen(q)) {
           const pts = q.querySelectorAll("[data-point]");
           v.textContent = `${Math.round(s * pts.length)} of ${pts.length} points`;
         } else {
           v.textContent = s === 1 ? "✓ Correct" : "✗ Not quite";
         }
-        v.className = "q-verdict " + status(s)[1];
+        if (s !== null) v.className = "q-verdict " + status(s)[1];
       });
-      const pct = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100);
-      results.querySelector("[data-score]").textContent = pct + "%";
-      results.querySelector("[data-score-label]").textContent =
-        pct >= 80 ? "You know this topic well." : pct >= 50 ? "Good start: a few gaps to close." : "Worth another pass through the lesson.";
+      const pct = graded.length ? Math.round(mean(graded) * 100) : 0;
+      results.querySelector("[data-score]").textContent = graded.length ? pct + "%" : "–";
+      results.querySelector("[data-score-label]").textContent = pending
+        ? `So far, with ${pending} written answer${pending > 1 ? "s" : ""} not graded yet. ` +
+          "Tick the points each answer covered (or None of these) to finish."
+        : pct >= 80 ? "You know this topic well." : pct >= 50 ? "Good start: a few gaps to close." : "Worth another pass through the lesson.";
       const mastered = [];
       results.querySelectorAll("[data-obj]").forEach((row) => {
         const n = row.dataset.obj;
-        const mine = scores.filter((_, i) => qs[i].dataset.objective === n);
+        const tested = scores.filter((_, i) => qs[i].dataset.objective === n);
+        const mine = tested.filter((s) => s !== null);
         const st = row.querySelector(".or-status");
-        if (!mine.length) { st.textContent = "Not tested"; st.className = "or-status"; return; }
-        const avg = mine.reduce((a, b) => a + b, 0) / mine.length;
+        if (!mine.length) {
+          st.textContent = tested.length ? "Not graded yet" : "Not tested"; st.className = "or-status";
+          row.querySelector(".bar span").style.width = "0";
+          return;
+        }
+        const avg = mean(mine);
         const [label, cls] = status(avg);
         st.textContent = label; st.className = "or-status " + cls;
         row.querySelector(".bar span").style.width = Math.round(avg * 100) + "%";
         row.querySelector(".bar span").className = cls;
         if (avg >= 0.8) mastered.push(Number(n));
       });
+      // Only a fully graded attempt becomes the topic's saved score.
+      if (pending) return;
       store.set("quiz:" + slug, JSON.stringify({ pct, date: new Date().toISOString().slice(0, 10), mastered }));
       mastered.forEach((n) => store.set(`obj:${slug}:${n - 1}`, "1"));
       refreshScores();
@@ -251,7 +271,9 @@
     function exportText() {
       const clean = (el) => (el ? el.textContent : "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
       const lines = [`Assessment results: ${form.dataset.title} (topic: ${slug}, ${new Date().toISOString().slice(0, 10)})`,
-        `Score: ${results.querySelector("[data-score]").textContent}`, "", "Objectives:"];
+        `Score: ${results.querySelector("[data-score]").textContent}` +
+          (qs.some((q) => score(q) === null) ? " (some written answers not self-graded; grade them yourself)" : ""),
+        "", "Objectives:"];
       results.querySelectorAll("[data-obj]").forEach((row) =>
         lines.push(`  ${row.dataset.obj}. ${clean(row.querySelector(".or-text"))}: ${clean(row.querySelector(".or-status"))}`));
       qs.forEach((q, i) => {
@@ -259,7 +281,7 @@
           `  Question: ${clean(q.querySelector(".q-text"))}`);
         if (isOpen(q)) {
           lines.push(`  My answer: ${q.querySelector("textarea").value.trim() || "(blank)"}`);
-          q.querySelectorAll("[data-point]").forEach((p) =>
+          q.querySelectorAll("[data-point], [data-none]").forEach((p) =>
             lines.push(`  [${p.checked ? "x" : " "}] ${clean(p.nextElementSibling)}`));
         } else {
           const opts = [...q.querySelectorAll(".opt")];
@@ -272,7 +294,14 @@
     }
 
     form.addEventListener("input", countUnanswered);
-    form.addEventListener("change", (e) => { if (e.target.matches("[data-point]")) grade(); });
+    form.addEventListener("change", (e) => {
+      if (!e.target.matches("[data-point], [data-none]")) return;
+      // "None of these" and the points exclude each other.
+      const q = e.target.closest(".question");
+      if (e.target.checked && e.target.matches("[data-none]")) q.querySelectorAll("[data-point]").forEach((p) => (p.checked = false));
+      if (e.target.checked && e.target.matches("[data-point]")) q.querySelector("[data-none]").checked = false;
+      grade();
+    });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       if (form.classList.contains("submitted")) return;

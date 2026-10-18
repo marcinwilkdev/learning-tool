@@ -84,7 +84,13 @@ Content rules for every page:
   When something is clearly missing, say so in a `> Note:` callout.
 - Write in your own clear words. Quote briefly only when the exact wording
   matters, such as a formal definition.
-- `sources` entries are `{doc: <doc-slug>, section: "<heading in raw>"}`.
+- `sources` entries are `{doc: <doc-slug>, section: "<heading in raw>"}`. The section must
+  match a heading in `kb/raw/<doc>.md` (case and spacing aside); `learnkb-check` warns
+  when it doesn't.
+- Frontmatter is YAML: in flow lists and maps, double-quote any value containing `@`, `{`,
+  `}`, `?`, `:` or a comma, e.g. `aliases: [git reflog, "HEAD@{n}", "@mentions"]`.
+- Close every link: `[[slug]]` or `[[slug|Label]]`. `learnkb-check` reports unclosed and
+  broken links in pages, lessons and quizzes.
 
 ### Source: `kb/sources/<doc>.md`
 ```markdown

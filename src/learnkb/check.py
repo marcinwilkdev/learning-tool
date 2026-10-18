@@ -1,4 +1,4 @@
-"""Validate the wiki under kb/ and regenerate kb/index.json.
+"""Validate the wiki under kb/ (pages, lessons and quizzes) and regenerate kb/index.json.
 
 Checks are mechanical only (structure, links, references); judgement calls such as
 contradictions between sources are left to the lint-kb skill.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 
-from learnkb.ingest import KB, MANIFEST
+from learnkb.ingest import KB, MANIFEST, RAW
 
 INDEX = KB / "index.json"
 CURRICULUM = KB / "curriculum.json"
@@ -32,6 +32,16 @@ NO_KB = ("No knowledge base yet (kb/ is missing). Add PDFs to library/ and run /
 DIFFICULTIES = {"beginner", "intermediate", "advanced"}
 LINK = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.S)
+CODE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
+# Substrings of PyYAML errors, and the usual cause when writing kb/ files by hand.
+YAML_HINTS = [
+    ("mapping values are not allowed", "a one-line value contains ': '; quote it or use a | block"),
+    ("while parsing a flow", "a value inside [...] or {...} contains @ { } ? : or a comma; double-quote it"),
+    ("found character '@'", "a value starts with @; double-quote it"),
+    ("found character '`'", "a value starts with a backtick; double-quote it"),
+    ("while parsing a block mapping", "if a | block starts with spaces (terminal output), write |2 so YAML "
+                                      "knows its indent; otherwise check the indentation"),
+]
 
 
 @dataclass
@@ -56,6 +66,30 @@ class Report:
         self.warnings.append(msg)
 
 
+def yaml_error(exc: yaml.YAMLError, line_offset: int = 0) -> str:
+    """One-line YAML error with the file line number and a hint for the common causes."""
+    mark = getattr(exc, "problem_mark", None)
+    where = f" at line {mark.line + 1 + line_offset}" if mark else ""
+    problem = getattr(exc, "problem", None) or str(exc).splitlines()[0]
+    hint = next((h for key, h in YAML_HINTS if key in str(exc)), "")
+    return f"invalid YAML{where}: {problem}" + (f" (hint: {hint})" if hint else "")
+
+
+def malformed_links(text: str) -> list[str]:
+    """Openings of [[links]] that never close, such as [[slug|Label], outside code."""
+    return re.findall(r"\[\[[^\n]{0,40}", LINK.sub("", CODE.sub("", text)))
+
+
+def check_links(rel: str, text: str, pages: dict, report: Report) -> set[str]:
+    """Report unclosed and broken [[links]] in text; return the link targets."""
+    for bad in malformed_links(text):
+        report.error(f"{rel}: unclosed link '{bad}' (needs ]])")
+    links = {m.strip() for m in LINK.findall(text)}
+    for target in sorted(links - pages.keys()):
+        report.error(f"{rel}: broken link [[{target}]]")
+    return links
+
+
 def load_pages(report: Report) -> dict[str, Page]:
     pages: dict[str, Page] = {}
     for kind, folder in SECTIONS.items():
@@ -68,7 +102,7 @@ def load_pages(report: Report) -> dict[str, Page]:
             try:
                 meta = yaml.safe_load(match.group(1)) or {}
             except yaml.YAMLError as exc:
-                report.error(f"{rel}: invalid frontmatter: {exc}")
+                report.error(f"{rel}: {yaml_error(exc, line_offset=1)}")
                 continue
             slug = path.stem
             if meta.get("type") != kind:
@@ -101,11 +135,9 @@ def check(pages: dict[str, Page], manifest: dict, curriculum: dict, report: Repo
 
     for page in pages.values():
         rel = page.path.relative_to(KB)
-        for target in sorted(page.links):
-            if target not in pages:
-                report.error(f"{rel}: broken link [[{target}]]")
-            elif target != page.slug:
-                inbound[target].add(page.slug)
+        check_links(str(rel), page.body, pages, report)
+        for target in page.links & pages.keys() - {page.slug}:
+            inbound[target].add(page.slug)
         for doc in source_docs(page):
             if doc not in docs:
                 report.error(f"{rel}: cites unknown document '{doc}'")
@@ -140,8 +172,26 @@ def check(pages: dict[str, Page], manifest: dict, curriculum: dict, report: Repo
         if not inbound[slug]:
             report.warn(f"concepts/{slug}.md: orphan (no page links to it)")
 
+    check_sections(pages, report)
     check_prerequisite_cycles(topics, report)
     check_curriculum(topics, curriculum, report)
+
+
+def check_sections(pages: dict[str, Page], report: Report) -> None:
+    """Warn when a cited section isn't a heading in the document's raw text."""
+    norm = lambda s: " ".join(str(s).split()).casefold()
+    headings: dict[str, set[str] | None] = {}
+    for page in pages.values():
+        for src in as_list(page.meta.get("sources")):
+            if not isinstance(src, dict) or not src.get("section"):
+                continue
+            doc = src.get("doc")
+            if doc not in headings:
+                raw = RAW / f"{doc}.md"
+                headings[doc] = ({norm(l.lstrip("#")) for l in raw.read_text().splitlines() if l.startswith("#")}
+                                 if raw.exists() else None)
+            if headings[doc] is not None and norm(src["section"]) not in headings[doc]:
+                report.warn(f"{page.path.relative_to(KB)}: section '{src['section']}' is not a heading in raw/{doc}.md")
 
 
 def check_prerequisite_cycles(topics: dict[str, Page], report: Report) -> None:
@@ -224,6 +274,8 @@ def main() -> None:
     pages = load_pages(report)
     curriculum = read_json(CURRICULUM)
     check(pages, read_json(MANIFEST), curriculum, report)
+    from learnkb.site import load_extras  # site imports this module, so import late
+    load_extras(pages, [t for m in curriculum.get("modules", []) for t in m.get("topics", [])], report)
 
     for msg in report.errors:
         print(f"ERROR  {msg}")

@@ -103,8 +103,15 @@ checks:                          # 4–6 questions covering the learning objecti
       so stage it again to include the new edits.
 ```
 
-**YAML gotcha:** a one-line value that contains `": "` (such as a question with a colon)
-must be quoted (`q: "…: …"`) or written as a `|` block, or the build fails.
+**YAML gotchas** (each of these broke a build before):
+- A one-line value that contains `": "` (such as a question with a colon), or that starts
+  with a backtick, `[`, `{`, `*`, `@` or `?`, must be double-quoted or written as a `|` block.
+- Inside `{...}` and `[...]`, double-quote any value containing `?`, `:`, `@`, `{`, `}` or a
+  comma: `- {label: "Where is it?", note: "git grep"}`.
+- If the first line of a `|` block starts with spaces, as terminal output often does
+  (` M README`), write `|2` so YAML takes the indent from the key, not from that line.
+- Bare `<placeholders>` in prose are fine (the renderer escapes them); in commands, use
+  the `command` field or backticks as usual.
 
 ### Writing good checks
 - Mix question types: recall ("What does…"), prediction ("What happens if…"),

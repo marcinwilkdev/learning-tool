@@ -57,10 +57,11 @@ How the script turns records into state:
    for each wrong question. Use a short kebab-case `id` that states the error, such as
    `stash-as-queue` or `merge-direction`. Don't record slips that the learner clearly got right
    elsewhere as misconceptions. Mention them in `summary` instead.
-4. **Write the record** to `learner/assessments/<date>-<slug>.json`, using today's date. If
-   that file exists (a retake on the same day), add `-2`, `-3` and so on. Then run
-   `uv run learnkb-learner record learner/assessments/<file>.json`. It validates the record,
-   rebuilds the state and prints the topic. Fix any `ERROR` and run it again.
+4. **Write the record** to a file in your scratchpad (`learner/assessments/` may not exist
+   yet), then run `uv run learnkb-learner record <that file>`. It validates the record,
+   stores it as `learner/assessments/<date>-<topic>.json` (adding `-2`, `-3` for a retake on
+   the same day), rebuilds the state and prints the topic. Fix any `ERROR` and run it again.
+   To correct a stored record, edit it in place and run `uv run learnkb-learner rebuild`.
 5. **Report** briefly:
    - what changed, such as objective levels before → after and misconceptions added or
      resolved
