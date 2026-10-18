@@ -170,6 +170,8 @@ def write_outline(raw: Path) -> Path:
 def refresh_outlines() -> None:
     for raw in sorted(RAW.glob("*.md")):
         if raw.name.endswith(".outline.md"):
+            if not raw.with_name(raw.name.removesuffix(".outline.md") + ".md").exists():
+                raw.unlink()  # its document is gone
             continue
         outline = raw.with_suffix(".outline.md")
         if not outline.exists() or outline.stat().st_mtime < raw.stat().st_mtime:
