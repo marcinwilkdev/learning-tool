@@ -9,6 +9,7 @@ there are no errors, so consumers never see a broken index.
 """
 
 import argparse
+import html
 import json
 import re
 import sys
@@ -179,7 +180,8 @@ def check(pages: dict[str, Page], manifest: dict, curriculum: dict, report: Repo
 
 def check_sections(pages: dict[str, Page], report: Report) -> None:
     """Warn when a cited section isn't a heading in the document's raw text."""
-    norm = lambda s: " ".join(str(s).split()).casefold()
+    # The PDF converter writes some characters as HTML entities ("SETUP &amp; INIT").
+    norm = lambda s: " ".join(html.unescape(str(s)).split()).casefold()
     headings: dict[str, set[str] | None] = {}
     for page in pages.values():
         for src in as_list(page.meta.get("sources")):
