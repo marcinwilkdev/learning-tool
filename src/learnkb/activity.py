@@ -15,19 +15,23 @@ ACTIVITY = Path(__file__).resolve().parents[2] / ".learnkb" / "activity.jsonl"
 PHASES = ["parse", "read", "source", "concepts", "topics", "curriculum", "check", "done"]
 
 
-def record(phase: str, message: str = "", doc: str | None = None, part: int | None = None) -> None:
+def record(phase: str, message: str = "", doc: str | None = None, part: int | None = None,
+           skipped: bool = False) -> None:
+    """Log a step. A read step with skipped=True marks a part left unread on purpose (an index, say)."""
     ACTIVITY.parent.mkdir(parents=True, exist_ok=True)
     entry = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "phase": phase,
-             "message": message, "doc": doc, "part": part}
+             "message": message, "doc": doc, "part": part, "skipped": skipped or None}
     with ACTIVITY.open("a") as f:
         f.write(json.dumps({k: v for k, v in entry.items() if v not in (None, "")}) + "\n")
 
 
-def recent(limit: int = 200) -> list[dict]:
+def recent(limit: int | None = 200) -> list[dict]:
+    """The last `limit` steps, or all of them when limit is None."""
     if not ACTIVITY.exists():
         return []
     out = []
-    for line in ACTIVITY.read_text().splitlines()[-limit:]:
+    lines = ACTIVITY.read_text().splitlines()
+    for line in lines[-limit:] if limit else lines:
         try:
             out.append(json.loads(line))
         except json.JSONDecodeError:

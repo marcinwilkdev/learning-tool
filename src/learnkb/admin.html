@@ -73,6 +73,8 @@ header .spacer { flex: 1; }
 .part span { position: relative; padding-bottom: 2px; font-variant-numeric: tabular-nums; }
 .part.read { border-color: var(--good); }
 .part.reading { border-color: var(--accent); animation: pulse 1.5s infinite; }
+.part.skipped { border: 2px dashed var(--border); background: transparent; color: var(--muted); }
+.part.skipped .fill { display: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
 
@@ -213,7 +215,7 @@ function renderDocs(d) {
   if (!docs.length) { $("docs").innerHTML = `<div class="card empty">No PDFs in <code>library/</code> yet.</div>`; return; }
   $("docs").innerHTML = docs.map((doc) => {
     const p = doc.plan;
-    const reading = step && step.phase === "read" && step.doc === doc.slug ? step.part : null;
+    const reading = step && step.phase === "read" && !step.skipped && step.doc === doc.slug ? step.part : null;
     const badges = [
       doc.unconverted ? `<span class="badge now">not converted: run learnkb-ingest</span>` : `<span class="badge yes">converted</span>`,
       p ? `<span class="badge ${p.outline ? "yes" : ""}">outline</span>` : "",
@@ -225,14 +227,17 @@ function renderDocs(d) {
                   doc.converted_at && `converted ${ago(doc.converted_at)}`].filter(Boolean).join(" · ");
     const parts = p ? `<div class="parts">${p.parts.map((x) => {
         const cov = pct(x.cited, x.headings);
-        const cls = x.n === reading ? "reading" : p.last_read && x.n <= p.last_read ? "read" : "";
-        return `<div class="part ${cls}" title="Part ${x.n}: lines ${x.lines[0]}–${x.lines[1]}, starts at “${esc(x.starts)}”\n${x.cited} of ${x.headings} headings cited (${cov}%)">
+        const cls = x.n === reading ? "reading" : x.status || "";
+        const note = x.status === "skipped" ? "skipped on purpose, left out of coverage"
+                                            : `${x.cited} of ${x.headings} headings cited (${cov}%)`;
+        return `<div class="part ${cls}" title="Part ${x.n}: lines ${x.lines[0]}–${x.lines[1]}, starts at “${esc(x.starts)}”\n${note}">
           <div class="fill" style="height:${cov}%"></div><span>${x.n}</span></div>`;
       }).join("")}</div>
-      <div class="legend"><span>${p.cited} of ${p.headings} headings cited by wiki pages (${pct(p.cited, p.headings)}%)</span>
+      <div class="legend"><span>${p.cited} of ${p.headings} headings cited by wiki pages (${pct(p.cited, p.headings)}%)${p.skipped ? `, not counting ${p.skipped} skipped part(s)` : ""}</span>
         <span><i style="background:var(--accent);opacity:.55"></i>fill = headings cited</span>
         <span><i style="border:2px solid var(--good)"></i>read</span>
-        <span><i style="border:2px solid var(--accent)"></i>reading now</span></div>` : "";
+        <span><i style="border:2px solid var(--accent)"></i>reading now</span>
+        <span><i style="border:2px dashed var(--muted)"></i>skipped</span></div>` : "";
     return `<div class="card doc"><div class="doc-head"><strong>${esc(doc.title)}</strong>
       <code class="muted">${esc(doc.file)}</code>${badges}</div>
       <div class="muted" style="font-size:13px">${meta}</div>${parts}</div>`;
@@ -261,7 +266,7 @@ function renderCurriculum(d) {
 function renderFeed(d) {
   const seen = new Set((prev?.files || []).map((f) => f.path + f.at));
   const items = [
-    ...(d.steps || []).map((s) => ({ at: s.at, html: `<span class="phase">${esc(s.phase)}</span>${esc(s.message || "")}${s.doc ? ` <span class="muted">${esc(s.doc)}${s.part ? ` · part ${s.part}` : ""}</span>` : ""}` })),
+    ...(d.steps || []).map((s) => ({ at: s.at, html: `<span class="phase">${esc(s.phase)}</span>${esc(s.message || "")}${s.skipped ? ` <span class="muted">(skipped)</span>` : ""}${s.doc ? ` <span class="muted">${esc(s.doc)}${s.part ? ` · part ${s.part}` : ""}</span>` : ""}` })),
     ...(d.files || []).map((f) => ({ at: f.at, fresh: prev && !seen.has(f.path + f.at),
       html: `${f.created ? `<span class="new">new</span>` : ""}<code>${esc(f.path)}</code>` })),
   ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 80);

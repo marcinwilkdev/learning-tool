@@ -37,6 +37,9 @@ uv run learnkb-admin step read "Part 3: Working with Remotes" --doc <doc> --part
 Phases, in order: `parse` (logged by `learnkb-ingest` itself), `read` (once per
 reading-plan part, with `--doc` and `--part`), `source`, `concepts`, `topics`,
 `curriculum`, `check`, and `done` when you've finished. The message is optional and short.
+If you deliberately leave parts of the reading plan unread (a book's index, say), log them
+once with `--skip` so the panel shows them as skipped and leaves them out of its coverage
+figure: `uv run learnkb-admin step read "Index" --doc <doc> --part 25-30 --skip`.
 One call per step is enough. Don't log every file: the panel sees file writes by itself.
 
 ## Procedure

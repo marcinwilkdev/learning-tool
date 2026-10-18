@@ -11,8 +11,10 @@ from disk, so the panel can be started or restarted at any point of a build:
 - health: the same errors and warnings as `learnkb-check`
 - activity: build steps (see `learnkb-admin step`) and recently written files
 
-`learnkb-admin step <phase> [message] [--doc SLUG] [--part N]` records a build step
-for the panel; the ingest skill calls it as it works.
+`learnkb-admin step <phase> [message] [--doc SLUG] [--part N|N-M] [--skip]` records a
+build step for the panel; the ingest skill calls it as it works. `read --skip` marks
+parts deliberately left unread, such as a book's index, which the coverage figure then
+leaves out.
 """
 
 import argparse
@@ -68,19 +70,24 @@ def document_plan(slug: str, cited: set[str], steps: list[dict]) -> dict | None:
         return None
     lines = raw.read_text().splitlines()
     heads = [i for i, l in enumerate(lines) if l.startswith("#")]
-    read = [s["part"] for s in steps if s.get("doc") == slug and s.get("phase") == "read"
-            and isinstance(s.get("part"), int)]
-    parts = []
+    # The latest step for a part wins, so a skipped part that's read later counts as read.
+    status: dict[int, str] = {}
+    for s in steps:
+        if s.get("doc") == slug and s.get("phase") == "read" and isinstance(s.get("part"), int):
+            status[s["part"]] = "skipped" if s.get("skipped") else "read"
+    parts, counted = [], set()
     for n, (a, b) in enumerate(reading_parts(lines, heads), 1):
         inside = [norm(lines[h].lstrip("#")) for h in heads if a - 1 <= h < b]
+        if status.get(n) != "skipped":
+            counted.update(inside)
         parts.append({"n": n, "lines": [a, b], "headings": len(inside),
-                      "cited": sum(h in cited for h in inside),
+                      "cited": sum(h in cited for h in inside), "status": status.get(n),
                       "starts": next((lines[h].lstrip("#").strip() for h in heads if a - 1 <= h < b), "")})
-    all_heads = {norm(lines[h].lstrip("#")) for h in heads}
+    # Coverage leaves out skipped parts (an index, say): their headings are never meant to be cited.
     return {"lines": len(lines), "kb": round(raw.stat().st_size / 1000), "parts": parts,
-            "headings": len(all_heads), "cited": len(all_heads & cited),
-            "outline": raw.with_suffix(".outline.md").exists(),
-            "last_read": max(read) if read else None}
+            "headings": len(counted), "cited": len(counted & cited),
+            "skipped": sum(p["status"] == "skipped" for p in parts),
+            "outline": raw.with_suffix(".outline.md").exists()}
 
 
 def documents(pages: dict, steps: list[dict]) -> list[dict]:
@@ -157,7 +164,7 @@ def snapshot() -> dict:
 
     files, written = recent_files()
     snap.update({
-        "documents": documents(pages, steps),
+        "documents": documents(pages, activity.recent(limit=None)),  # reading progress needs every step
         "counts": {**{folder: sum(p.kind == kind for p in pages.values()) for kind, folder in SECTIONS.items()},
                    "modules": len(curriculum.get("modules", [])), "placed": len(order),
                    "lessons": len(lessons), "quizzes": len(quizzes)},
@@ -290,6 +297,18 @@ def serve(port: int, open_browser: bool) -> None:
         pass
 
 
+def parts_arg(value: str) -> list[int]:
+    """--part accepts one part number or an inclusive range such as 25-30."""
+    first, _, last = value.partition("-")
+    try:
+        a, b = int(first), int(last or first)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected N or N-M, got {value!r}")
+    if not 1 <= a <= b:
+        raise argparse.ArgumentTypeError(f"invalid part range {value!r}")
+    return list(range(a, b + 1))
+
+
 def main() -> None:
     serving = argparse.ArgumentParser(add_help=False)
     serving.add_argument("--port", type=int, default=8001)
@@ -302,12 +321,16 @@ def main() -> None:
     step.add_argument("phase", choices=activity.PHASES)
     step.add_argument("message", nargs="?", default="")
     step.add_argument("--doc", help="document slug the step is about")
-    step.add_argument("--part", type=int, help="reading-plan part being read (with --doc)")
+    step.add_argument("--part", type=parts_arg, help="reading-plan part being read, or a range N-M (with --doc)")
+    step.add_argument("--skip", action="store_true", help="with read: the part(s) are deliberately not read")
     sub.add_parser("status", help="print the current snapshot as JSON")
     args = parser.parse_args()
 
     if args.command == "step":
-        activity.record(args.phase, args.message, args.doc, args.part)
+        if args.skip and (args.phase != "read" or not args.part or not args.doc):
+            parser.error("--skip needs the read phase, --doc and --part")
+        for part in args.part or [None]:
+            activity.record(args.phase, args.message, args.doc, part, skipped=args.skip)
     elif args.command == "status":
         print(json.dumps(snapshot(), indent=2))
     else:

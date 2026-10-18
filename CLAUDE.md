@@ -46,4 +46,4 @@ and `learner/` on the branch.
 | `uv run learnkb-site [topic…]` | render `site/` (a full build when no topics are given) |
 | `uv run learnkb-learner [record FILE \| rebuild \| status [topic]]` | the learner knowledge database |
 | `uv run learnkb-admin [--open]` | live admin panel on http://localhost:8001: build progress, coverage, health |
-| `uv run learnkb-admin step PHASE [MSG] [--doc D --part N]` | record a build step for the panel (used by /ingest) |
+| `uv run learnkb-admin step PHASE [MSG] [--doc D --part N\|N-M] [--skip]` | record a build step for the panel (used by /ingest); `read --skip` marks parts left unread on purpose |
