@@ -27,11 +27,15 @@ into a guided lesson. The generator places each piece into the page.
    `/lint-kb`. The page can't be built from a broken wiki.
 2. **Read the material.** Read `kb/topics/<slug>.md`, every concept page in its
    `concepts` list, and its prerequisite topics' summaries. Open the cited sections
-   in `kb/raw/` when you need exact commands or output.
+   in `kb/raw/` when you need exact commands or output: find them in the *Headings* table
+   of `kb/raw/<doc>.outline.md`, and check its *Possible conversion losses* for lines in
+   those sections. Near a flagged line, a command or its output may be missing or
+   flattened, so leave it out rather than guess.
 3. **Design the lesson.** Ask yourself:
    - What concrete situation makes this topic matter to a learner? That's the hook.
-   - Is there a process or pipeline with stages? That's the flow diagram. Skip it if
-     the topic isn't a sequence.
+   - Is there a process or pipeline with stages? That's a `steps` flow diagram. Are there
+     alternatives to pick from by situation, such as which tool answers which question?
+     That's a `choices` flow. Skip the diagram if the topic is neither.
    - What hands-on sequence lets the learner *see* the ideas work? That's the
      step-through. Each step should show one idea and build on the previous one.
    - What would show the learner they've met each learning objective? That's the
@@ -75,6 +79,7 @@ hook: |                          # 2–4 sentences: a relatable problem, in the 
   Which of `analysis_02.sh` and `analysis_final_v3.sh` produced your figure?
 
 flow:                            # optional; shown after Overview. 2–5 nodes
+  layout: steps                  # steps (default): a sequence joined by arrows
   nodes:
     - {label: Working directory, note: "where you edit"}
     - {label: Staging area, note: "what goes in the next commit"}
@@ -82,6 +87,16 @@ flow:                            # optional; shown after Overview. 2–5 nodes
   arrows: ["git add", "git commit"]   # one label per gap between nodes
   loop: "Edit again and repeat"       # optional line under the diagram
   caption: "How a change travels into history."
+
+# For alternatives with no order between them, use layout: choices. It shows the
+# optional prompt above the options; arrows and loop aren't used.
+# flow:
+#   layout: choices
+#   prompt: "What do you need to find out?"
+#   nodes:
+#     - {label: "Where is it?", note: "git grep"}
+#     - {label: "Who changed this line?", note: "git blame"}
+#   caption: "Pick the tool by the question."
 
 walkthrough:                     # optional; shown after Walkthrough. 4–8 steps
   title: Your first commits, step by step

@@ -33,7 +33,8 @@ So this skill has two modes. Pick one from the arguments.
 1. **Check the wiki.** Run `uv run learnkb-check`. If it fails, stop and suggest `/lint-kb`.
 2. **Read the material.** Read `kb/topics/<slug>.md` and number its learning objectives
    from 1. Read every concept page in its `concepts` list, and `kb/lessons/<slug>.yaml` if
-   it exists. Open the cited sections in `kb/raw/` when you need exact commands or output.
+   it exists. Open the cited sections in `kb/raw/` when you need exact commands or output,
+   and check `kb/raw/<doc>.outline.md` for conversion losses near them.
 3. **Plan the coverage.** Write 8–12 questions in total, with 1–3 per objective. Give more
    questions to objectives the topic's *Common pitfalls* section touches.
 

@@ -13,6 +13,7 @@ read everything from `kb/`. Paths are relative to the project root.
 
 ```
 kb/raw/<doc>.md          parsed PDFs, written by the script. Never edit.
+kb/raw/<doc>.outline.md  reading plan, likely conversion losses and headings with line numbers
 kb/manifest.json         documents and their wiki_built flag
 kb/sources/<doc>.md      one page per document: what it contains and where it was used
 kb/concepts/<slug>.md    one page per concept, the core of the wiki
@@ -37,8 +38,12 @@ or summary, and links. This tells you what the wiki already knows, so you can
 merge into it instead of duplicating.
 
 ### 3. Process one document at a time
-For each pending document, read `kb/raw/<doc>.md` in full (in parts if long),
-noting section headings for citations. Then:
+For each pending document, read `kb/raw/<doc>.outline.md` first. Then read
+`kb/raw/<doc>.md` in full, one part of its reading plan per `Read` call (offset and
+limit as listed), noting section headings for citations. Where the outline flags a
+possible conversion loss, look at those lines: a command or output that became an
+image is gone, so don't reconstruct it from outside knowledge. Use what the
+surrounding text states, or leave it out. Then:
 
 1. **Source page**: write `kb/sources/<doc>.md`.
 2. **Concepts**: list the concepts the document teaches. For each one:
@@ -75,7 +80,8 @@ Summarise for the user:
 - concepts created or updated
 - topics created or updated
 - any contradictions you found
-- any badly parsed content in `kb/raw/`, such as garbled tables or OCR noise
+- any badly parsed content in `kb/raw/`, such as garbled tables or OCR noise, starting
+  from the outline's *Possible conversion losses*
 
 ## Page formats
 

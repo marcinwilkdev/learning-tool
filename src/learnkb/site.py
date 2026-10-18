@@ -169,12 +169,18 @@ def load_lesson(slug: str, pages: dict[str, Page], report: Report) -> dict | Non
         return None
     if lesson.get("topic") != slug:
         report.error(f"{rel}: 'topic' should be '{slug}'")
-    for i, node in enumerate(lesson.get("flow", {}).get("nodes", [])):
+    flow = lesson.get("flow", {})
+    for i, node in enumerate(flow.get("nodes", [])):
         if "label" not in node:
             report.error(f"{rel}: flow node {i} needs a label")
-    if any(not str(a).strip() for a in lesson.get("flow", {}).get("arrows", [])):
-        report.warn(f"{rel}: flow has empty arrow labels; name each transition, or drop the diagram "
-                    "if the nodes are alternatives rather than steps")
+    layout = flow.get("layout", "steps")
+    if layout not in ("steps", "choices"):
+        report.error(f"{rel}: flow layout must be 'steps' or 'choices', got {layout!r}")
+    elif layout == "choices" and (flow.get("arrows") or flow.get("loop")):
+        report.warn(f"{rel}: a 'choices' flow has no order, so its arrows and loop aren't shown")
+    elif layout == "steps" and any(not str(a).strip() for a in flow.get("arrows", [])):
+        report.warn(f"{rel}: flow has empty arrow labels; name each transition, or use "
+                    "layout: choices if the nodes are alternatives rather than steps")
     for i, step in enumerate(lesson.get("walkthrough", {}).get("steps", [])):
         if not step.get("explain"):
             report.error(f"{rel}: walkthrough step {i + 1} needs 'explain'")
@@ -185,6 +191,8 @@ def load_lesson(slug: str, pages: dict[str, Page], report: Report) -> dict | Non
 
 
 def render_flow(flow: dict, pages, prefix) -> str:
+    if flow.get("layout") == "choices":
+        return render_choices(flow, pages, prefix)
     nodes = flow.get("nodes", [])
     arrows = flow.get("arrows", [])
     parts = []
@@ -199,6 +207,17 @@ def render_flow(flow: dict, pages, prefix) -> str:
         back = f'<p class="flow-loop">↺ {inline_md(flow["loop"], pages, prefix)}</p>'
     caption = f'<figcaption>{inline_md(flow["caption"], pages, prefix)}</figcaption>' if flow.get("caption") else ""
     return f'<figure class="flow"><div class="flow-row">{"".join(parts)}</div>{back}{caption}</figure>'
+
+
+def render_choices(flow: dict, pages, prefix) -> str:
+    """Alternatives that branch from one starting point, with no order between them."""
+    cards = "".join(
+        f'<div class="flow-node"><span class="flow-label">{esc(node["label"])}</span>'
+        + (f'<span class="flow-note">{inline_md(node["note"], pages, prefix)}</span>' if node.get("note") else "")
+        + "</div>" for node in flow.get("nodes", []))
+    prompt = f'<div class="flow-prompt">{inline_md(flow["prompt"], pages, prefix)}</div>' if flow.get("prompt") else ""
+    caption = f'<figcaption>{inline_md(flow["caption"], pages, prefix)}</figcaption>' if flow.get("caption") else ""
+    return f'<figure class="flow flow-choices">{prompt}<div class="flow-options">{cards}</div>{caption}</figure>'
 
 
 def render_steps(walk: dict, pages, prefix) -> str:
