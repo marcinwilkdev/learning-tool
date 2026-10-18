@@ -25,6 +25,7 @@ git switch main
 git switch -c learn/<subject>
 # copy the PDFs into library/
 ```
+To watch the build live, run `uv run learnkb-admin --open` in another terminal first.
 Then run `/ingest`, `/learning-page all` and `/assess <topic>`, and commit `library/`, `kb/`
 and `learner/` on the branch.
 
@@ -44,3 +45,5 @@ and `learner/` on the branch.
 | `uv run learnkb-check` | validate the wiki and regenerate `kb/index.json` |
 | `uv run learnkb-site [topic…]` | render `site/` (a full build when no topics are given) |
 | `uv run learnkb-learner [record FILE \| rebuild \| status [topic]]` | the learner knowledge database |
+| `uv run learnkb-admin [--open]` | live admin panel on http://localhost:8001: build progress, coverage, health |
+| `uv run learnkb-admin step PHASE [MSG] [--doc D --part N]` | record a build step for the panel (used by /ingest) |

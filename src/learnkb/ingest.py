@@ -18,6 +18,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from learnkb import activity
+
 ROOT = Path(__file__).resolve().parents[2]
 LIBRARY = ROOT / "library"
 KB = ROOT / "kb"
@@ -208,6 +210,7 @@ def ingest(force: bool = False) -> int:
             slug, n = f"{base}-{n}", n + 1
 
         print(f"convert  {rel} -> kb/raw/{slug}.md")
+        activity.record("parse", f"Converting {rel}", doc=slug)
         converter = converter or make_converter()
         try:
             result = converter.convert(pdf)
@@ -237,6 +240,7 @@ def ingest(force: bool = False) -> int:
     refresh_outlines()
 
     pending = [d["slug"] for d in docs.values() if not d["wiki_built"] and not d.get("removed")]
+    activity.record("parse", f"{len(pending)} document(s) awaiting wiki ingest")
     print(f"\n{len(pending)} document(s) awaiting wiki ingest: {', '.join(pending) or '-'}")
     return 1 if failures else 0
 

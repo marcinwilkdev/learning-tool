@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge base admin</title>
+<style>
+:root {
+  --bg: #fbfaf7; --surface: #fff; --surface-2: #f3f1ec; --text: #1d1c1a; --muted: #6b6760;
+  --border: #e4e0d8; --accent: #c2410c; --accent-soft: #fdeee6; --good: #15803d; --good-soft: #e7f5ec;
+  --warn: #b45309; --warn-soft: #fdf4e3; --bad: #b91c1c; --bad-soft: #fdeaea; --note: #3b5bab;
+  --note-soft: #eef2fb; --radius: 12px;
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161513; --surface: #1f1e1b; --surface-2: #2a2825; --text: #ece9e2; --muted: #a39e94;
+    --border: #36332e; --accent: #fb923c; --accent-soft: #3a2418; --good: #4ade80; --good-soft: #17301f;
+    --warn: #fbbf24; --warn-soft: #33280f; --bad: #f87171; --bad-soft: #3a1a1a; --note: #9db4f0;
+    --note-soft: #1c2436; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 32px 0 12px; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted); }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+header .spacer { flex: 1; }
+.chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.live .dot { background: var(--good); animation: pulse 2s infinite; }
+.offline .dot { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .35; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+
+/* current step */
+.now { margin-top: 20px; }
+.stepper { display: flex; gap: 4px; margin: 12px 0 10px; flex-wrap: wrap; }
+.stepper span { flex: 1 1 80px; text-align: center; font-size: 12px; padding: 6px 4px; border-radius: 6px;
+  background: var(--surface-2); color: var(--muted); }
+.stepper .past { background: var(--good-soft); color: var(--good); }
+.stepper .current { background: var(--accent); color: #fff; font-weight: 600; }
+.now-line { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+.now-line strong { font-size: 17px; }
+
+/* tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.tile .n { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.tile .label { font-size: 13px; color: var(--muted); }
+.tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.bar { height: 4px; background: var(--surface-2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+.tile.bad .n { color: var(--bad); }
+.tile.ok .n { color: var(--good); }
+
+/* documents */
+.doc + .doc { margin-top: 12px; }
+.doc-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.doc-head strong { font-size: 16px; margin-right: 4px; }
+.badge { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
+.badge.yes { background: var(--good-soft); color: var(--good); }
+.badge.now { background: var(--accent-soft); color: var(--accent); }
+.parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 4px; margin: 12px 0 6px; }
+.part { position: relative; height: 40px; border-radius: 6px; background: var(--surface-2); overflow: hidden;
+  border: 2px solid transparent; font-size: 11px; display: flex; align-items: flex-end; justify-content: center; }
+.part .fill { position: absolute; inset: auto 0 0 0; background: var(--accent); opacity: .55; transition: height .4s; }
+.part span { position: relative; padding-bottom: 2px; font-variant-numeric: tabular-nums; }
+.part.read { border-color: var(--good); }
+.part.reading { border-color: var(--accent); animation: pulse 1.5s infinite; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+
+/* curriculum */
+.module { display: grid; grid-template-columns: 200px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.module:first-child { border-top: 0; padding-top: 0; }
+.module .title { font-weight: 600; font-size: 14px; }
+.topics { display: flex; flex-wrap: wrap; gap: 6px; }
+.topic { font-size: 12.5px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
+.topic.page { background: var(--note-soft); border-color: transparent; color: var(--note); }
+.topic.lesson { background: var(--good-soft); border-color: transparent; color: var(--good); }
+.topic.quiz { background: var(--good); border-color: transparent; color: var(--surface); }
+.topic.missing { border-style: dashed; color: var(--bad); background: transparent; }
+.topic.flash { animation: flash 1.2s; }
+@keyframes flash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* feeds */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.feed { list-style: none; margin: 0; padding: 0; max-height: 460px; overflow: auto; }
+.feed li { display: grid; grid-template-columns: 88px 1fr; gap: 8px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.feed li:first-child { border-top: 0; }
+.feed time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.feed .phase { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--accent); margin-right: 6px; }
+.feed .new { color: var(--good); font-size: 11px; font-weight: 600; margin-right: 6px; }
+.feed li.fresh { animation: flash-bg 2s; }
+@keyframes flash-bg { from { background: var(--accent-soft); } }
+.issues { list-style: none; margin: 0; padding: 0; max-height: 460px; overflow: auto; font-size: 13px; }
+.issues li { padding: 4px 0 4px 10px; border-left: 3px solid var(--warn); margin: 4px 0; word-break: break-word; }
+.issues li.error { border-color: var(--bad); }
+.tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.tabs button { font: inherit; font-size: 13px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+.failure { background: var(--bad-soft); color: var(--bad); white-space: pre-wrap; margin-top: 16px; }
+@media (max-width: 760px) {
+  .cols { grid-template-columns: 1fr; }
+  .module { grid-template-columns: 1fr; gap: 6px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Knowledge base admin</h1>
+    <span class="chip" id="branch" hidden></span>
+    <span class="spacer"></span>
+    <span class="chip" id="conn"><span class="dot"></span><span>connecting…</span></span>
+  </header>
+  <div id="failure" class="card failure" hidden></div>
+  <section class="card now" id="now"></section>
+  <h2>Overview</h2>
+  <div class="tiles" id="tiles"></div>
+  <h2>Documents</h2>
+  <div id="docs"></div>
+  <h2>Curriculum</h2>
+  <div class="card">
+    <div class="legend" style="margin-bottom:12px">
+      <span><i style="background:var(--note-soft)"></i>topic page</span>
+      <span><i style="background:var(--good-soft)"></i>+ lesson</span>
+      <span><i style="background:var(--good)"></i>+ quiz</span>
+      <span><i style="border:1px dashed var(--bad)"></i>listed, no page yet</span>
+    </div>
+    <div id="curriculum"></div>
+  </div>
+  <div class="cols">
+    <div><h2>Activity</h2><div class="card"><ul class="feed" id="feed"></ul></div></div>
+    <div><h2>Health <span class="muted" id="health-sum"></span></h2>
+      <div class="card">
+        <div class="tabs" id="tabs">
+          <button data-tab="errors" aria-pressed="true">Errors</button>
+          <button data-tab="warnings" aria-pressed="false">Warnings</button>
+        </div>
+        <ul class="issues" id="issues"></ul>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const STALE_MIN = 30;  // a step older than this isn't "now" any more
+let state = null, prev = null, tab = "errors";
+
+function ago(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return `${Math.round(s)}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+
+function renderNow(d) {
+  const step = d.steps?.at(-1);
+  const active = step && step.phase !== "done" && (Date.now() - new Date(step.at)) / 60000 < STALE_MIN;
+  const idx = active ? d.phases.indexOf(step.phase) : -1;
+  const stepper = d.phases.map((p, i) =>
+    `<span class="${i < idx ? "past" : i === idx ? "current" : ""}">${esc(p)}</span>`).join("");
+  let line;
+  if (active) {
+    const doc = d.documents?.find((x) => x.slug === step.doc);
+    const total = doc?.plan?.parts.length;
+    line = `<strong>${esc(step.message || step.phase)}</strong>
+      ${step.doc ? `<span class="chip">${esc(step.doc)}${step.part ? ` · part ${step.part}${total ? ` of ${total}` : ""}` : ""}</span>` : ""}
+      <span class="muted">started ${ago(step.at)}</span>`;
+  } else if (step) {
+    line = `<strong>Idle</strong> <span class="muted">last step “${esc(step.message || step.phase)}” ${ago(step.at)}</span>`;
+  } else {
+    line = `<strong>Idle</strong> <span class="muted">no build steps recorded yet. Run <code>/ingest</code> and progress appears here.</span>`;
+  }
+  const w = d.written ? `<span class="muted">${d.written["10m"]} file(s) written in the last 10 min, ${d.written["60m"]} in the last hour</span>` : "";
+  $("now").innerHTML = `<div class="now-line">${line}</div><div class="stepper">${stepper}</div>${w}`;
+}
+
+function tile(label, n, sub, frac, cls = "") {
+  return `<div class="card tile ${cls}"><div class="label">${label}</div><div class="n">${n}</div>
+    ${sub ? `<div class="sub">${sub}</div>` : ""}${frac != null ? `<div class="bar"><i style="width:${frac}%"></i></div>` : ""}</div>`;
+}
+
+function renderTiles(d) {
+  const c = d.counts, docs = (d.documents || []).filter((x) => !x.removed), h = d.health;
+  const built = docs.filter((x) => x.wiki_built).length;
+  $("tiles").innerHTML = [
+    tile("Documents built", `${built}/${docs.length}`, `${docs.filter((x) => x.plan).length} converted`, pct(built, docs.length)),
+    tile("Concepts", c.concepts, "pages in the wiki"),
+    tile("Topics", c.topics, `${c.placed} placed in ${c.modules} modules`, pct(c.placed, c.topics)),
+    tile("Lessons", `${c.lessons}/${c.topics}`, "topics with a lesson", pct(c.lessons, c.topics)),
+    tile("Quizzes", `${c.quizzes}/${c.topics}`, "topics with a quiz", pct(c.quizzes, c.topics)),
+    tile("Errors", h.n_errors, `${h.n_warnings} warning(s)`, null, h.n_errors ? "bad" : "ok"),
+  ].join("");
+}
+
+function renderDocs(d) {
+  const step = d.steps?.at(-1);
+  const docs = d.documents || [];
+  if (!docs.length) { $("docs").innerHTML = `<div class="card empty">No PDFs in <code>library/</code> yet.</div>`; return; }
+  $("docs").innerHTML = docs.map((doc) => {
+    const p = doc.plan;
+    const reading = step && step.phase === "read" && step.doc === doc.slug ? step.part : null;
+    const badges = [
+      doc.unconverted ? `<span class="badge now">not converted: run learnkb-ingest</span>` : `<span class="badge yes">converted</span>`,
+      p ? `<span class="badge ${p.outline ? "yes" : ""}">outline</span>` : "",
+      doc.slug ? `<span class="badge ${doc.source_page ? "yes" : ""}">source page</span>` : "",
+      doc.slug ? `<span class="badge ${doc.wiki_built ? "yes" : "now"}">${doc.wiki_built ? "wiki built" : "wiki pending"}</span>` : "",
+      doc.removed ? `<span class="badge">removed from library</span>` : "",
+    ].join(" ");
+    const meta = [doc.pages && `${doc.pages} pages`, p && `${p.lines.toLocaleString()} lines`, p && `${p.kb} KB`,
+                  doc.converted_at && `converted ${ago(doc.converted_at)}`].filter(Boolean).join(" · ");
+    const parts = p ? `<div class="parts">${p.parts.map((x) => {
+        const cov = pct(x.cited, x.headings);
+        const cls = x.n === reading ? "reading" : p.last_read && x.n <= p.last_read ? "read" : "";
+        return `<div class="part ${cls}" title="Part ${x.n}: lines ${x.lines[0]}–${x.lines[1]}, starts at “${esc(x.starts)}”\n${x.cited} of ${x.headings} headings cited (${cov}%)">
+          <div class="fill" style="height:${cov}%"></div><span>${x.n}</span></div>`;
+      }).join("")}</div>
+      <div class="legend"><span>${p.cited} of ${p.headings} headings cited by wiki pages (${pct(p.cited, p.headings)}%)</span>
+        <span><i style="background:var(--accent);opacity:.55"></i>fill = headings cited</span>
+        <span><i style="border:2px solid var(--good)"></i>read</span>
+        <span><i style="border:2px solid var(--accent)"></i>reading now</span></div>` : "";
+    return `<div class="card doc"><div class="doc-head"><strong>${esc(doc.title)}</strong>
+      <code class="muted">${esc(doc.file)}</code>${badges}</div>
+      <div class="muted" style="font-size:13px">${meta}</div>${parts}</div>`;
+  }).join("");
+}
+
+function renderCurriculum(d) {
+  const before = new Map();
+  prev?.curriculum?.modules.flatMap((m) => m.topics).concat(prev.curriculum.unplaced)
+    .forEach((t) => before.set(t.slug, `${t.page}${t.lesson}${t.quiz}`));
+  const chip = (t) => {
+    const cls = !t.page ? "missing" : t.quiz ? "quiz" : t.lesson ? "lesson" : "page";
+    const changed = prev && before.get(t.slug) !== `${t.page}${t.lesson}${t.quiz}`;
+    return `<span class="topic ${cls}${changed ? " flash" : ""}" title="${esc(t.slug)} · ${t.concepts} concept(s)">${esc(t.title)}</span>`;
+  };
+  const cur = d.curriculum;
+  const rows = cur.modules.map((m) => `<div class="module"><div><div class="title">${esc(m.title)}</div>
+      <div class="muted" style="font-size:12px">${m.topics.length} topic(s)</div></div>
+      <div class="topics">${m.topics.map(chip).join("")}</div></div>`);
+  if (cur.unplaced.length) rows.push(`<div class="module"><div><div class="title">Not in the curriculum</div>
+      <div class="muted" style="font-size:12px">topic pages with no module yet</div></div>
+      <div class="topics">${cur.unplaced.map(chip).join("")}</div></div>`);
+  $("curriculum").innerHTML = rows.join("") || `<div class="empty">No curriculum yet. It appears once topics are written.</div>`;
+}
+
+function renderFeed(d) {
+  const seen = new Set((prev?.files || []).map((f) => f.path + f.at));
+  const items = [
+    ...(d.steps || []).map((s) => ({ at: s.at, html: `<span class="phase">${esc(s.phase)}</span>${esc(s.message || "")}${s.doc ? ` <span class="muted">${esc(s.doc)}${s.part ? ` · part ${s.part}` : ""}</span>` : ""}` })),
+    ...(d.files || []).map((f) => ({ at: f.at, fresh: prev && !seen.has(f.path + f.at),
+      html: `${f.created ? `<span class="new">new</span>` : ""}<code>${esc(f.path)}</code>` })),
+  ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 80);
+  $("feed").innerHTML = items.map((i) => `<li class="${i.fresh ? "fresh" : ""}"><time title="${esc(i.at)}">${clock(i.at)}</time><div>${i.html}</div></li>`).join("")
+    || `<li class="empty">Nothing yet.</li>`;
+}
+
+function renderHealth(d) {
+  const h = d.health;
+  $("health-sum").textContent = `· ${h.n_errors} error(s), ${h.n_warnings} warning(s)`;
+  document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.tab === tab));
+  const list = h[tab], total = tab === "errors" ? h.n_errors : h.n_warnings;
+  $("issues").innerHTML = list.map((m) => `<li class="${tab === "errors" ? "error" : ""}">${esc(m)}</li>`).join("")
+    + (total > list.length ? `<li class="muted">… and ${total - list.length} more (run <code>uv run learnkb-check</code>)</li>` : "")
+    || `<li class="empty" style="border:0">None. ${tab === "errors" ? "The wiki validates." : ""}</li>`;
+}
+
+function render(d) {
+  $("branch").hidden = !d.branch;
+  $("branch").textContent = d.branch ? `⎇ ${d.branch}` : "";
+  $("failure").hidden = !d.failure;
+  if (d.failure) $("failure").textContent = `Couldn't read the knowledge base (probably a file mid-write; retrying on the next change):\n${d.failure}`;
+  renderNow(d);
+  if (!d.kb) {
+    $("tiles").innerHTML = ""; $("curriculum").innerHTML = ""; $("feed").innerHTML = "";
+    $("docs").innerHTML = `<div class="card empty">No <code>kb/</code> on this branch. Switch to a learning branch, or add PDFs and run <code>/ingest</code>.</div>`;
+    return;
+  }
+  if (d.failure) return;  // keep the last good view
+  renderTiles(d); renderDocs(d); renderCurriculum(d); renderFeed(d); renderHealth(d);
+  prev = d;
+}
+
+$("tabs").addEventListener("click", (e) => {
+  if (!e.target.dataset.tab) return;
+  tab = e.target.dataset.tab;
+  if (state?.health) renderHealth(state);
+});
+
+function setConn(cls, text) { $("conn").className = `chip ${cls}`; $("conn").lastElementChild.textContent = text; }
+function connect() {
+  const es = new EventSource("/api/events");
+  es.onopen = () => setConn("live", "live");
+  es.onmessage = (e) => { state = JSON.parse(e.data); render(state); setConn("live", `live · updated ${clock(state.generated_at)}`); };
+  es.onerror = () => setConn("offline", "disconnected, retrying…");  // EventSource reconnects by itself
+}
+connect();
+setInterval(() => state && renderNow(state), 5000);  // keep the "x ago" labels fresh
+</script>
+</body>
+</html>

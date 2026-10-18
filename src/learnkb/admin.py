@@ -1,0 +1,319 @@
+"""Admin panel: watch the knowledge base being built, live.
+
+`learnkb-admin` serves a dashboard on http://localhost:8001. A watcher thread polls kb/,
+library/ and the activity log once a second; when anything changes it recomputes a
+snapshot and pushes it to open pages over Server-Sent Events. Everything is derived
+from disk, so the panel can be started or restarted at any point of a build:
+
+- per document: converted, outlined, wiki built, and its reading plan with the share
+  of headings in each part that wiki pages already cite
+- the wiki: page counts, the curriculum with each topic's lesson and quiz status
+- health: the same errors and warnings as `learnkb-check`
+- activity: build steps (see `learnkb-admin step`) and recently written files
+
+`learnkb-admin step <phase> [message] [--doc SLUG] [--part N]` records a build step
+for the panel; the ingest skill calls it as it works.
+"""
+
+import argparse
+import html
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+import traceback
+import webbrowser
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from learnkb import activity
+from learnkb.check import CURRICULUM, SECTIONS, Report, as_list, check, load_pages, read_json
+from learnkb.ingest import KB, LIBRARY, MANIFEST, RAW, ROOT, reading_parts
+from learnkb.site import load_extras
+
+PAGE = Path(__file__).parent / "admin.html"
+WATCHED = [KB, LIBRARY, activity.ACTIVITY.parent]
+RECENT_FILES = 40
+HEALTH_LIMIT = 200
+
+
+# ---------------------------------------------------------------- snapshot
+
+
+def iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="seconds")
+
+
+def norm(section) -> str:
+    # Same normalisation as check_sections: entities and spacing don't matter.
+    return " ".join(html.unescape(str(section)).split()).casefold()
+
+
+def git_branch() -> str | None:
+    try:
+        out = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT,
+                             capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def document_plan(slug: str, cited: set[str], steps: list[dict]) -> dict | None:
+    """The reading plan of kb/raw/<slug>.md with citation coverage and reading progress per part."""
+    raw = RAW / f"{slug}.md"
+    if not raw.exists():
+        return None
+    lines = raw.read_text().splitlines()
+    heads = [i for i, l in enumerate(lines) if l.startswith("#")]
+    read = [s["part"] for s in steps if s.get("doc") == slug and s.get("phase") == "read"
+            and isinstance(s.get("part"), int)]
+    parts = []
+    for n, (a, b) in enumerate(reading_parts(lines, heads), 1):
+        inside = [norm(lines[h].lstrip("#")) for h in heads if a - 1 <= h < b]
+        parts.append({"n": n, "lines": [a, b], "headings": len(inside),
+                      "cited": sum(h in cited for h in inside),
+                      "starts": next((lines[h].lstrip("#").strip() for h in heads if a - 1 <= h < b), "")})
+    all_heads = {norm(lines[h].lstrip("#")) for h in heads}
+    return {"lines": len(lines), "kb": round(raw.stat().st_size / 1000), "parts": parts,
+            "headings": len(all_heads), "cited": len(all_heads & cited),
+            "outline": raw.with_suffix(".outline.md").exists(),
+            "last_read": max(read) if read else None}
+
+
+def documents(pages: dict, steps: list[dict]) -> list[dict]:
+    manifest = read_json(MANIFEST).get("documents", {})
+    cited: dict[str, set[str]] = {}
+    for page in pages.values():
+        for src in as_list(page.meta.get("sources")):
+            if isinstance(src, dict) and src.get("section"):
+                cited.setdefault(src.get("doc"), set()).add(norm(src["section"]))
+    source_docs = {p.meta.get("doc") for p in pages.values() if p.kind == "source"}
+
+    out = []
+    for rel, d in manifest.items():
+        out.append({"file": rel, "slug": d["slug"], "title": d.get("title") or d["slug"],
+                    "pages": d.get("pages"), "converted_at": d.get("converted_at"),
+                    "wiki_built": bool(d.get("wiki_built")), "removed": bool(d.get("removed")),
+                    "source_page": d["slug"] in source_docs,
+                    "plan": document_plan(d["slug"], cited.get(d["slug"], set()), steps)})
+    for pdf in sorted(LIBRARY.glob("**/*.pdf")):
+        rel = str(pdf.relative_to(LIBRARY))
+        if rel not in manifest:
+            out.append({"file": rel, "slug": None, "title": pdf.stem, "wiki_built": False,
+                        "removed": False, "source_page": False, "plan": None, "unconverted": True})
+    return out
+
+
+def curriculum_view(pages: dict, lessons: dict, quizzes: dict) -> dict:
+    curriculum = read_json(CURRICULUM)
+    topics = {s: p for s, p in pages.items() if p.kind == "topic"}
+
+    def topic(slug: str) -> dict:
+        page = topics.get(slug)
+        return {"slug": slug, "title": page.meta.get("title", slug) if page else slug,
+                "page": page is not None, "lesson": slug in lessons, "quiz": slug in quizzes,
+                "concepts": len(as_list(page.meta.get("concepts"))) if page else 0}
+
+    modules = [{"slug": m.get("slug"), "title": m.get("title") or m.get("slug"),
+                "topics": [topic(t) for t in m.get("topics", [])]}
+               for m in curriculum.get("modules", [])]
+    placed = {t["slug"] for m in modules for t in m["topics"]}
+    unplaced = [topic(s) for s in sorted(topics) if s not in placed]
+    return {"modules": modules, "unplaced": unplaced}
+
+
+def recent_files(limit: int = RECENT_FILES) -> tuple[list[dict], dict]:
+    files, counts = [], {"10m": 0, "60m": 0}
+    now = time.time()
+    for path in KB.rglob("*"):
+        if not path.is_file() or path.name.startswith("."):
+            continue
+        st = path.stat()
+        born = getattr(st, "st_birthtime", None)
+        files.append({"path": str(path.relative_to(KB)), "at": st.st_mtime,
+                      "created": born is not None and st.st_mtime - born < 2})
+        counts["10m"] += now - st.st_mtime < 600
+        counts["60m"] += now - st.st_mtime < 3600
+    files.sort(key=lambda f: f["at"], reverse=True)
+    return [{**f, "at": iso(f["at"])} for f in files[:limit]], counts
+
+
+def snapshot() -> dict:
+    steps = activity.recent()
+    snap = {"generated_at": iso(time.time()), "branch": git_branch(), "kb": KB.exists(),
+            "steps": steps[-60:], "phases": activity.PHASES}
+    if not KB.exists():
+        return snap
+
+    report = Report()
+    pages = load_pages(report)
+    curriculum = read_json(CURRICULUM)
+    check(pages, read_json(MANIFEST), curriculum, report)
+    order = [t for m in curriculum.get("modules", []) for t in m.get("topics", [])]
+    lessons, quizzes = load_extras(pages, order, report)
+
+    files, written = recent_files()
+    snap.update({
+        "documents": documents(pages, steps),
+        "counts": {**{folder: sum(p.kind == kind for p in pages.values()) for kind, folder in SECTIONS.items()},
+                   "modules": len(curriculum.get("modules", [])), "placed": len(order),
+                   "lessons": len(lessons), "quizzes": len(quizzes)},
+        "curriculum": curriculum_view(pages, lessons, quizzes),
+        "health": {"errors": report.errors[:HEALTH_LIMIT], "warnings": report.warnings[:HEALTH_LIMIT],
+                   "n_errors": len(report.errors), "n_warnings": len(report.warnings)},
+        "files": files, "written": written,
+    })
+    return snap
+
+
+def safe_snapshot() -> dict:
+    # Mid-build, files can be half-written; report that instead of killing the watcher.
+    try:
+        return snapshot()
+    except Exception:
+        return {"generated_at": iso(time.time()), "kb": KB.exists(), "branch": git_branch(),
+                "steps": activity.recent()[-60:], "phases": activity.PHASES,
+                "failure": traceback.format_exc(limit=3)}
+
+
+# ---------------------------------------------------------------- watcher
+
+
+def fingerprint() -> tuple:
+    count, newest, size = 0, 0, 0
+    for root in WATCHED:
+        if not root.exists():
+            continue
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") or d == ".learnkb"]
+            for name in filenames:
+                try:
+                    st = os.stat(os.path.join(dirpath, name))
+                except FileNotFoundError:
+                    continue  # deleted between listing and stat
+                count += 1
+                newest = max(newest, st.st_mtime_ns)
+                size += st.st_size
+    return count, newest, size
+
+
+class Watcher(threading.Thread):
+    """Recompute the snapshot whenever the watched files change, and wake up listeners."""
+
+    def __init__(self, interval: float = 1.0):
+        super().__init__(daemon=True)
+        self.interval = interval
+        self.changed = threading.Condition()
+        self.version = 0
+        self.data = json.dumps(safe_snapshot())
+        self.last = fingerprint()
+
+    def run(self) -> None:
+        while True:
+            time.sleep(self.interval)
+            current = fingerprint()
+            if current == self.last:
+                continue
+            self.last = current
+            data = json.dumps(safe_snapshot())
+            with self.changed:
+                self.data, self.version = data, self.version + 1
+                self.changed.notify_all()
+
+
+# ---------------------------------------------------------------- server
+
+
+def handler(watcher: Watcher):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):  # keep the terminal quiet
+            pass
+
+        def send(self, body: bytes, ctype: str) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            path = self.path.split("?")[0]
+            if path in ("/", "/index.html"):
+                self.send(PAGE.read_bytes(), "text/html; charset=utf-8")
+            elif path == "/api/status":
+                self.send(watcher.data.encode(), "application/json")
+            elif path == "/api/events":
+                self.events()
+            else:
+                self.send_error(404)
+
+        def events(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            seen = -1
+            try:
+                while True:
+                    with watcher.changed:
+                        if watcher.version == seen:
+                            watcher.changed.wait(timeout=15)
+                        version, data = watcher.version, watcher.data
+                    if version != seen:
+                        self.wfile.write(f"data: {data}\n\n".encode())
+                        seen = version
+                    else:
+                        self.wfile.write(b": keep-alive\n\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the page was closed
+
+    return Handler
+
+
+def serve(port: int, open_browser: bool) -> None:
+    watcher = Watcher()
+    watcher.start()
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler(watcher))
+    server.daemon_threads = True
+    url = f"http://localhost:{port}"
+    print(f"admin panel on {url} (watching kb/ and library/); Ctrl+C to stop")
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+def main() -> None:
+    serving = argparse.ArgumentParser(add_help=False)
+    serving.add_argument("--port", type=int, default=8001)
+    serving.add_argument("--open", action="store_true", help="open the panel in a browser")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     parents=[serving])
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("serve", parents=[serving], help="serve the admin panel (the default)")
+    step = sub.add_parser("step", help="record a build step for the panel")
+    step.add_argument("phase", choices=activity.PHASES)
+    step.add_argument("message", nargs="?", default="")
+    step.add_argument("--doc", help="document slug the step is about")
+    step.add_argument("--part", type=int, help="reading-plan part being read (with --doc)")
+    sub.add_parser("status", help="print the current snapshot as JSON")
+    args = parser.parse_args()
+
+    if args.command == "step":
+        activity.record(args.phase, args.message, args.doc, args.part)
+    elif args.command == "status":
+        print(json.dumps(snapshot(), indent=2))
+    else:
+        serve(args.port, args.open)
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
