@@ -18,7 +18,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from learnkb.check import CURRICULUM, Report, load_pages, read_json
+from learnkb.check import CURRICULUM, NO_KB, Report, load_pages, read_json
 from learnkb.ingest import ROOT
 from learnkb.site import objectives
 
@@ -268,6 +268,8 @@ def main() -> None:
     st = sub.add_parser("status", help="print the current state (all topics, or one)")
     st.add_argument("topic", nargs="?")
     args = parser.parse_args()
+    if not CURRICULUM.exists():
+        sys.exit(NO_KB)
     pages, curriculum, order = load_kb()
 
     if args.cmd == "record":

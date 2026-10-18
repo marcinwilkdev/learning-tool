@@ -25,7 +25,7 @@ import markdown
 import yaml
 from pygments.formatters import HtmlFormatter
 
-from learnkb.check import CURRICULUM, LINK, Page, Report, check, load_pages, read_json
+from learnkb.check import CURRICULUM, LINK, NO_KB, Page, Report, check, load_pages, read_json
 from learnkb.ingest import KB, MANIFEST, ROOT
 
 SITE = ROOT / "site"
@@ -563,6 +563,9 @@ def code_css() -> str:
 
 
 def build(only: list[str] | None = None) -> int:
+    if not CURRICULUM.exists():
+        print(NO_KB)
+        return 1
     report = Report()
     pages = load_pages(report)
     curriculum = read_json(CURRICULUM)

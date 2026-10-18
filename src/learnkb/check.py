@@ -27,6 +27,8 @@ REQUIRED = {
     "concept": ["title", "definition", "sources"],
     "topic": ["title", "module", "summary", "difficulty", "concepts", "sources"],
 }
+NO_KB = ("No knowledge base yet (kb/ is missing). Add PDFs to library/ and run /ingest. "
+         "On main, switch to a learning branch first (git branch --list 'learn/*').")
 DIFFICULTIES = {"beginner", "intermediate", "advanced"}
 LINK = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.S)
@@ -216,6 +218,8 @@ def main() -> None:
     parser.add_argument("--quiet", action="store_true", help="print errors only")
     args = parser.parse_args()
 
+    if not KB.exists():
+        sys.exit(NO_KB)
     report = Report()
     pages = load_pages(report)
     curriculum = read_json(CURRICULUM)
