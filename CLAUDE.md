@@ -29,8 +29,8 @@ git switch -c learn/<subject>
 ```
 To watch the build live, run `uv run learnkb-serve --open --admin` in another terminal first: the
 admin panel shows the progress, and the site at http://localhost:8000 fills in as pages are written.
-Then run `/ingest`, `/learning-page all` and `/assess <topic>`, and commit `library/`, `kb/`
-and `learner/` on the branch.
+Then run `/build-course` (or the steps one by one: `/ingest`, `/learning-page all` and
+`/assess all`), and commit `library/`, `kb/` and `learner/` on the branch.
 
 ## Daily loop
 1. Double-click `Start learning.command` (macOS) or `Start learning.bat` (Windows), or run
