@@ -16,6 +16,9 @@ PDFs dropped on the panel are posted to `api/upload` and saved in library/, read
 `/ingest`; nothing is converted until then. Uploads are refused on main, which holds no
 subject content.
 
+The panel speaks English or Polish: the viewer's pick (the toggle in its header), else
+the language kb/site.json gives the site, else the browser's.
+
 `learnkb-admin step <phase> [message] [--doc SLUG] [--part N|N-M] [--skip]` records a
 build step for the panel; the ingest skill calls it as it works. `read --skip` marks
 parts deliberately left unread, such as a book's index, which the coverage figure then
