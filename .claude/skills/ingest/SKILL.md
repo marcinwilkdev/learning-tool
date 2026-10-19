@@ -36,7 +36,7 @@ Slugs are lowercase-kebab and **unique across the whole wiki**. Link pages with
 `[[slug]]` or `[[slug|display text]]` (Obsidian-compatible).
 
 ## Progress
-The user may be watching the build on the admin panel (`uv run learnkb-admin`). Report
+The user may be watching the build on the admin panel (`uv run learnkb-serve`, at /admin/). Report
 each step as you start it, so the panel shows where you are:
 
 ```bash

@@ -25,13 +25,15 @@ git switch main
 git switch -c learn/<subject>
 # copy the PDFs into library/
 ```
-To watch the build live, run `uv run learnkb-admin --open` in another terminal first.
+To watch the build live, run `uv run learnkb-serve --open --admin` in another terminal first: the
+admin panel shows the progress, and the site at http://localhost:8000 fills in as pages are written.
 Then run `/ingest`, `/learning-page all` and `/assess <topic>`, and commit `library/`, `kb/`
 and `learner/` on the branch.
 
 ## Daily loop
-1. `uv run learnkb-serve --open` (builds the site and serves it on http://localhost:8000).
-   Safari blocks pages opened from `file://`.
+1. `uv run learnkb-serve --open`: the site on http://localhost:8000, the admin panel on
+   http://localhost:8000/admin/. It rebuilds the site whenever `kb/` changes, so leave it running.
+   (Safari blocks pages opened from `file://`.)
 2. Learn a topic on the site.
 3. `/assess <topic>`, then take the quiz on the site. The page saves the results to
    `learner/inbox/` by itself.
@@ -48,6 +50,6 @@ and `learner/` on the branch.
 | `uv run learnkb-check` | validate the wiki and regenerate `kb/index.json` |
 | `uv run learnkb-site [topic…]` | render `site/` (a full build when no topics are given) |
 | `uv run learnkb-learner [record FILE \| rebuild \| status [topic]]` | the learner knowledge database |
-| `uv run learnkb-serve [--open] [--port N]` | build `site/` and serve it on http://localhost:8000; quiz results are saved to `learner/inbox/` |
-| `uv run learnkb-admin [--open]` | live admin panel on http://localhost:8001: build progress, coverage, health |
+| `uv run learnkb-serve [--open [--admin]] [--port N]` | serve the site on http://localhost:8000 (rebuilt whenever `kb/` changes) and the admin panel on /admin/ (build progress, coverage, health); quiz results are saved to `learner/inbox/` |
+| `uv run learnkb-admin [--open]` | the same server, opening the admin panel |
 | `uv run learnkb-admin step PHASE [MSG] [--doc D --part N\|N-M] [--skip]` | record a build step for the panel (used by /ingest); `read --skip` marks parts left unread on purpose |

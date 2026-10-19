@@ -1,6 +1,7 @@
 """Admin panel: watch the knowledge base being built, live.
 
-`learnkb-admin` serves a dashboard on http://localhost:8001. A watcher thread polls kb/,
+The dashboard is served at http://localhost:8000/admin/ by `learnkb-serve`, next to the
+learning site (`learnkb-admin` starts the same server and opens the panel). A watcher thread polls kb/,
 library/ and the activity log once a second; when anything changes it recomputes a
 snapshot and pushes it to open pages over Server-Sent Events. Everything is derived
 from disk, so the panel can be started or restarted at any point of a build:
@@ -26,9 +27,8 @@ import sys
 import threading
 import time
 import traceback
-import webbrowser
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 from learnkb import activity
@@ -209,11 +209,14 @@ def fingerprint() -> tuple:
 
 
 class Watcher(threading.Thread):
-    """Recompute the snapshot whenever the watched files change, and wake up listeners."""
+    """Recompute the snapshot whenever the watched files change, and wake up listeners.
+
+    `on_change` callbacks run in the watcher thread after each new snapshot."""
 
     def __init__(self, interval: float = 1.0):
         super().__init__(daemon=True)
         self.interval = interval
+        self.on_change: list = []
         self.changed = threading.Condition()
         self.version = 0
         self.data = json.dumps(safe_snapshot())
@@ -230,72 +233,54 @@ class Watcher(threading.Thread):
             with self.changed:
                 self.data, self.version = data, self.version + 1
                 self.changed.notify_all()
+            for callback in self.on_change:
+                callback()
 
 
 # ---------------------------------------------------------------- server
 
 
-def handler(watcher: Watcher):
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, fmt, *args):  # keep the terminal quiet
-            pass
-
-        def send(self, body: bytes, ctype: str) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def do_GET(self):
-            path = self.path.split("?")[0]
-            if path in ("/", "/index.html"):
-                self.send(PAGE.read_bytes(), "text/html; charset=utf-8")
-            elif path == "/api/status":
-                self.send(watcher.data.encode(), "application/json")
-            elif path == "/api/events":
-                self.events()
-            else:
-                self.send_error(404)
-
-        def events(self) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            seen = -1
-            try:
-                while True:
-                    with watcher.changed:
-                        if watcher.version == seen:
-                            watcher.changed.wait(timeout=15)
-                        version, data = watcher.version, watcher.data
-                    if version != seen:
-                        self.wfile.write(f"data: {data}\n\n".encode())
-                        seen = version
-                    else:
-                        self.wfile.write(b": keep-alive\n\n")
-                    self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                pass  # the page was closed
-
-    return Handler
+def send(request: BaseHTTPRequestHandler, body: bytes, ctype: str) -> None:
+    request.send_response(200)
+    request.send_header("Content-Type", ctype)
+    request.send_header("Cache-Control", "no-store")
+    request.send_header("Content-Length", str(len(body)))
+    request.end_headers()
+    request.wfile.write(body)
 
 
-def serve(port: int, open_browser: bool) -> None:
-    watcher = Watcher()
-    watcher.start()
-    server = ThreadingHTTPServer(("127.0.0.1", port), handler(watcher))
-    server.daemon_threads = True
-    url = f"http://localhost:{port}"
-    print(f"admin panel on {url} (watching kb/ and library/); Ctrl+C to stop")
-    if open_browser:
-        webbrowser.open(url)
+def handle_get(request: BaseHTTPRequestHandler, path: str, watcher: Watcher) -> None:
+    """Answer a GET for the panel; `path` is relative to where the panel is mounted."""
+    if path in ("", "index.html"):
+        send(request, PAGE.read_bytes(), "text/html; charset=utf-8")
+    elif path == "api/status":
+        send(request, watcher.data.encode(), "application/json")
+    elif path == "api/events":
+        events(request, watcher)
+    else:
+        request.send_error(404)
+
+
+def events(request: BaseHTTPRequestHandler, watcher: Watcher) -> None:
+    request.send_response(200)
+    request.send_header("Content-Type", "text/event-stream")
+    request.send_header("Cache-Control", "no-store")
+    request.end_headers()
+    seen = -1
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+        while True:
+            with watcher.changed:
+                if watcher.version == seen:
+                    watcher.changed.wait(timeout=15)
+                version, data = watcher.version, watcher.data
+            if version != seen:
+                request.wfile.write(f"data: {data}\n\n".encode())
+                seen = version
+            else:
+                request.wfile.write(b": keep-alive\n\n")
+            request.wfile.flush()
+    except (BrokenPipeError, ConnectionResetError):
+        pass  # the page was closed
 
 
 def parts_arg(value: str) -> list[int]:
@@ -312,12 +297,12 @@ def parts_arg(value: str) -> list[int]:
 
 def main() -> None:
     serving = argparse.ArgumentParser(add_help=False)
-    serving.add_argument("--port", type=int, default=8001)
+    serving.add_argument("--port", type=int, default=8000)
     serving.add_argument("--open", action="store_true", help="open the panel in a browser")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                      parents=[serving])
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("serve", parents=[serving], help="serve the admin panel (the default)")
+    sub.add_parser("serve", parents=[serving], help="serve the site and the panel, like learnkb-serve (the default)")
     step = sub.add_parser("step", help="record a build step for the panel")
     step.add_argument("phase", choices=activity.PHASES)
     step.add_argument("message", nargs="?", default="")
@@ -335,7 +320,8 @@ def main() -> None:
     elif args.command == "status":
         print(json.dumps(snapshot(), indent=2))
     else:
-        serve(args.port, args.open)
+        from learnkb import serve  # serve imports this module
+        serve.run(args.port, open_path="admin/" if args.open else None)
     sys.exit(0)
 
 

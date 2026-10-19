@@ -122,6 +122,7 @@ header .spacer { flex: 1; }
     <h1>Knowledge base admin</h1>
     <span class="chip" id="branch" hidden></span>
     <span class="spacer"></span>
+    <a class="chip" href="../" target="learnkb-site">Learning site ↗</a>
     <span class="chip" id="conn"><span class="dot"></span><span>connecting…</span></span>
   </header>
   <div id="failure" class="card failure" hidden></div>
@@ -310,7 +311,7 @@ $("tabs").addEventListener("click", (e) => {
 
 function setConn(cls, text) { $("conn").className = `chip ${cls}`; $("conn").lastElementChild.textContent = text; }
 function connect() {
-  const es = new EventSource("/api/events");
+  const es = new EventSource("api/events")  // relative: the panel lives under /admin/;
   es.onopen = () => setConn("live", "live");
   es.onmessage = (e) => { state = JSON.parse(e.data); render(state); setConn("live", `live · updated ${clock(state.generated_at)}`); };
   es.onerror = () => setConn("offline", "disconnected, retrying…");  // EventSource reconnects by itself
