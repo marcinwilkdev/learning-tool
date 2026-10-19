@@ -6,6 +6,22 @@
   document.documentElement.classList.add("js");
   const KB = window.KB || { topics: [], concepts: {} };
   const PREFIX = window.KB_PREFIX || "";
+
+  // Interface strings come from data.js in the knowledge base's language (see i18n.py).
+  // Templates use {name} for a value and {word:count} for a word that agrees with a count.
+  const LANG = KB.lang || "en";
+  const plurals = new Intl.PluralRules(LANG);
+  function fmt(dict, key, vals) {
+    const tpl = (dict && dict[key]) || (KB.en && KB.en[key]) || key;
+    return tpl.replace(/\{(\w+)(?::(\w+))?\}/g, (_, name, count) => {
+      if (!count) return vals[name];
+      const forms = dict[name] || KB.en[name];
+      return forms[plurals.select(vals[count])] || forms.other;
+    });
+  }
+  const t = (key, vals = {}) => fmt(KB.strings, key, vals);
+  // The results export stays in English: the assess and track-knowledge skills read it.
+  const en = (key, vals = {}) => fmt(KB.en, key, vals);
   const NS = "learnkb:";
 
   const store = {
@@ -21,14 +37,14 @@
     const pct = KB.topics.length ? Math.round((done / KB.topics.length) * 100) : 0;
     document.querySelectorAll("[data-progress-bar]").forEach((el) => (el.style.width = pct + "%"));
     document.querySelectorAll("[data-progress-text]").forEach(
-      (el) => (el.textContent = `${done} of ${KB.topics.length} topics complete`));
+      (el) => (el.textContent = t("progress", { done, total: KB.topics.length })));
     document.querySelectorAll("[data-topic]").forEach((el) =>
       el.classList.toggle("is-done", isDone(el.dataset.topic)));
     const cont = document.querySelector("[data-continue]");
     if (cont && done > 0) {
       const next = KB.topics.find((t) => !isDone(t.slug));
-      if (next) { cont.href = `topics/${next.slug}.html`; cont.textContent = `Continue: ${next.title} →`; }
-      else { cont.textContent = "All topics complete ✓"; }
+      if (next) { cont.href = `topics/${next.slug}.html`; cont.textContent = t("continue", { title: next.title }); }
+      else { cont.textContent = t("all_complete"); }
     }
   }
 
@@ -37,7 +53,7 @@
     const paint = () => {
       const d = isDone(slug);
       btn.classList.toggle("done", d);
-      btn.textContent = d ? "✓ Completed — click to undo" : "Mark topic as complete";
+      btn.textContent = d ? t("completed_undo") : t("mark_complete");
     };
     btn.addEventListener("click", () => {
       isDone(slug) ? store.del("done:" + slug) : store.set("done:" + slug, "1");
@@ -61,7 +77,7 @@
     let i = 0;
     steps.forEach((_, n) => {
       const b = document.createElement("button");
-      b.setAttribute("aria-label", `Go to step ${n + 1}`);
+      b.setAttribute("aria-label", t("go_to_step", { n: n + 1 }));
       b.addEventListener("click", () => show(n));
       dots.appendChild(b);
     });
@@ -70,17 +86,17 @@
       steps.forEach((s, k) => s.classList.toggle("active", k === i));
       [...dots.children].forEach((d, k) => d.classList.toggle("on", k <= i));
       prev.disabled = i === 0;
-      next.textContent = i === steps.length - 1 ? "Done ✓" : "Next →";
+      next.textContent = i === steps.length - 1 ? t("done") : t("next");
     }
     prev.addEventListener("click", () => show(i - 1));
     next.addEventListener("click", () => {
-      if (i === steps.length - 1) { root.classList.add("show-all"); toggle.textContent = "One at a time"; }
+      if (i === steps.length - 1) { root.classList.add("show-all"); toggle.textContent = t("one_at_a_time"); }
       else show(i + 1);
     });
     const toggle = root.querySelector("[data-show-all]");
     toggle.addEventListener("click", () => {
       const all = root.classList.toggle("show-all");
-      toggle.textContent = all ? "One at a time" : "Show all";
+      toggle.textContent = all ? t("one_at_a_time") : t("show_all");
     });
     root.addEventListener("keydown", (e) => {
       if (e.target.closest("input, textarea")) return;
@@ -134,8 +150,8 @@
   if (search) {
     const results = document.querySelector(".search-results");
     const items = [
-      ...KB.topics.map((t) => ({ title: t.title, sub: "Topic · " + t.summary, href: `topics/${t.slug}.html`, hay: (t.title + " " + t.summary).toLowerCase() })),
-      ...Object.entries(KB.concepts).map(([slug, c]) => ({ title: c.title, sub: "Concept · " + c.definition, href: `concepts/${slug}.html`, hay: (c.title + " " + c.aliases.join(" ") + " " + c.definition).toLowerCase() })),
+      ...KB.topics.map((tp) => ({ title: tp.title, sub: t("search_topic") + tp.summary, href: `topics/${tp.slug}.html`, hay: (tp.title + " " + tp.summary).toLowerCase() })),
+      ...Object.entries(KB.concepts).map(([slug, c]) => ({ title: c.title, sub: t("search_concept") + c.definition, href: `concepts/${slug}.html`, hay: (c.title + " " + c.aliases.join(" ") + " " + c.definition).toLowerCase() })),
     ];
     search.addEventListener("input", () => {
       const q = search.value.trim().toLowerCase();
@@ -148,7 +164,7 @@
         const s = document.createElement("small"); s.textContent = h.sub;
         a.appendChild(s); li.appendChild(a); results.appendChild(li);
       });
-      if (!hits.length) { const li = document.createElement("li"); li.className = "muted"; li.style.padding = "8px 10px"; li.textContent = "No matches"; results.appendChild(li); }
+      if (!hits.length) { const li = document.createElement("li"); li.className = "muted"; li.style.padding = "8px 10px"; li.textContent = t("no_matches"); results.appendChild(li); }
       results.hidden = false;
     });
     document.addEventListener("click", (e) => !e.target.closest(".search") && (results.hidden = true));
@@ -170,7 +186,7 @@
       const r = quizResult(el.dataset.quizScore);
       el.hidden = !r;
       if (r) {
-        el.textContent = `Last quiz: ${r.pct}%`;
+        el.textContent = t("last_quiz", { pct: r.pct });
         el.className = "chip chip-score " + (r.pct >= 80 ? "chip-beginner" : r.pct >= 50 ? "chip-intermediate" : "chip-advanced");
       }
     });
@@ -204,7 +220,7 @@
     const answered = (q) => isOpen(q) ? q.querySelector("textarea").value.trim() !== "" : !!q.querySelector(".opts input:checked");
     function countUnanswered() {
       const n = qs.filter((q) => !answered(q)).length;
-      unanswered.textContent = n ? `${n} question${n > 1 ? "s" : ""} unanswered` : "All questions answered";
+      unanswered.textContent = n ? t("unanswered", { n }) : t("all_answered");
     }
     // A number from 0 to 1, or null for an open answer the learner hasn't graded yet.
     function score(q) {
@@ -216,7 +232,9 @@
       }
       return [...q.querySelectorAll(".opt")].every((o) => o.querySelector("input").checked === (o.dataset.correct === "1")) ? 1 : 0;
     }
-    const status = (s) => s >= 0.8 ? ["Solid", "good"] : s >= 0.5 ? ["Shaky", "partial"] : ["Review", "bad"];
+    const status = (s) => s >= 0.8 ? ["solid", "good"] : s >= 0.5 ? ["shaky", "partial"] : ["review", "bad"];
+    // Show `key` in the page's language and keep the English text for the export.
+    const label = (el, key, vals) => { el.textContent = t(key, vals); el.dataset.en = en(key, vals); };
 
     const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
     function grade() {
@@ -227,22 +245,21 @@
         const v = q.querySelector(".q-verdict");
         const s = scores[i];
         if (s === null) {
-          v.textContent = "Not graded yet: tick the points you covered";
+          label(v, "not_graded_hint");
           v.className = "q-verdict pending";
         } else if (isOpen(q)) {
           const pts = q.querySelectorAll("[data-point]");
-          v.textContent = `${Math.round(s * pts.length)} of ${pts.length} points`;
+          label(v, "points_of", { got: Math.round(s * pts.length), n: pts.length });
         } else {
-          v.textContent = s === 1 ? "✓ Correct" : "✗ Not quite";
+          label(v, s === 1 ? "correct" : "not_quite");
         }
         if (s !== null) v.className = "q-verdict " + status(s)[1];
       });
       const pct = graded.length ? Math.round(mean(graded) * 100) : 0;
       results.querySelector("[data-score]").textContent = graded.length ? pct + "%" : "–";
       results.querySelector("[data-score-label]").textContent = pending
-        ? `So far, with ${pending} written answer${pending > 1 ? "s" : ""} not graded yet. ` +
-          "Tick the points each answer covered (or None of these) to finish."
-        : pct >= 80 ? "You know this topic well." : pct >= 50 ? "Good start: a few gaps to close." : "Worth another pass through the lesson.";
+        ? t("so_far", { n: pending })
+        : t(pct >= 80 ? "verdict_good" : pct >= 50 ? "verdict_ok" : "verdict_bad");
       const mastered = [];
       results.querySelectorAll("[data-obj]").forEach((row) => {
         const n = row.dataset.obj;
@@ -250,13 +267,13 @@
         const mine = tested.filter((s) => s !== null);
         const st = row.querySelector(".or-status");
         if (!mine.length) {
-          st.textContent = tested.length ? "Not graded yet" : "Not tested"; st.className = "or-status";
+          label(st, tested.length ? "not_graded" : "not_tested"); st.className = "or-status";
           row.querySelector(".bar span").style.width = "0";
           return;
         }
         const avg = mean(mine);
-        const [label, cls] = status(avg);
-        st.textContent = label; st.className = "or-status " + cls;
+        const [key, cls] = status(avg);
+        label(st, key); st.className = "or-status " + cls;
         row.querySelector(".bar span").style.width = Math.round(avg * 100) + "%";
         row.querySelector(".bar span").className = cls;
         if (avg >= 0.8) mastered.push(Number(n));
@@ -269,7 +286,7 @@
     }
 
     function exportText() {
-      const clean = (el) => (el ? el.textContent : "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+      const clean = (el) => (el ? el.dataset.en || el.textContent : "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
       const lines = [`Assessment results: ${form.dataset.title} (topic: ${slug}, ${new Date().toISOString().slice(0, 10)})`,
         `Score: ${results.querySelector("[data-score]").textContent}` +
           (qs.some((q) => score(q) === null) ? " (some written answers not self-graded; grade them yourself)" : ""),
@@ -322,9 +339,9 @@
       form.classList.remove("submitted");
       form.querySelectorAll(".opts input, textarea").forEach((el) => (el.disabled = false));
       form.querySelectorAll(".opt").forEach((o) => o.classList.remove("is-correct", "is-wrong", "is-chosen"));
-      form.querySelectorAll(".q-verdict").forEach((v) => { v.textContent = ""; v.className = "q-verdict"; });
+      form.querySelectorAll(".q-verdict").forEach((v) => { v.textContent = ""; delete v.dataset.en; v.className = "q-verdict"; });
       results.hidden = true; fallback.hidden = true;
-      copyBtn.textContent = "Copy results for Claude";
+      copyBtn.textContent = t("copy_results");
       shuffle(); countUnanswered();
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -332,11 +349,11 @@
       const text = exportText();
       const manual = () => {
         fallback.value = text; fallback.hidden = false; fallback.select();
-        copyBtn.textContent = "Copy the text below";
+        copyBtn.textContent = t("copy_below");
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => {
-          copyBtn.textContent = "Copied ✓ Paste it into Claude";
+          copyBtn.textContent = t("copied");
           fallback.value = text;
         }, manual);
       } else manual();

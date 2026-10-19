@@ -27,6 +27,8 @@ from pygments.formatters import HtmlFormatter
 
 from learnkb.check import (CODE, CURRICULUM, LINK, NO_KB, Page, Report, check, check_links, load_pages,
                            read_json, yaml_error)
+from learnkb import i18n
+from learnkb.i18n import t
 from learnkb.ingest import KB, MANIFEST, ROOT
 
 SITE = ROOT / "site"
@@ -100,9 +102,23 @@ def render_md(md: str, pages: dict[str, Page], prefix: str) -> str:
     )
     # "> Note: ..." callouts and "> Parsing note" get their own styling.
     out = re.sub(r"<blockquote>\s*<p>(Note|Parsing note|Source disagreement[^:]*):",
-                 lambda m: f'<blockquote class="callout callout-note"><p><strong>{m.group(1)}:</strong>',
+                 lambda m: f'<blockquote class="callout callout-note"><p><strong>{callout_label(m.group(1))}:</strong>',
                  out)
     return out
+
+
+def callout_label(label: str) -> str:
+    return t(f"callout:{label.lower()}") if f"callout:{label.lower()}" in i18n.strings else label
+
+
+def heading_label(heading: str) -> str:
+    """The display name of a section heading; kb/ pages keep the English one."""
+    key = f"heading:{heading.lower()}"
+    return t(key) if key in i18n.strings else heading
+
+
+def localize_headings(md: str) -> str:
+    return re.sub(r"^(#{2,3} +)(.+)$", lambda m: m.group(1) + heading_label(m.group(2).strip()), md, flags=re.M)
 
 
 def split_sections(body: str) -> list[tuple[str, str]]:
@@ -231,27 +247,27 @@ def render_steps(walk: dict, pages, prefix) -> str:
             out = f'<pre class="t-out">{esc(str(step["output"]).rstrip())}</pre>' if step.get("output") else ""
             term = f'<div class="terminal" aria-label="Terminal">{cmd}{out}</div>'
         items.append(
-            f'<li class="step" data-step="{i}"><div class="step-head"><span class="step-num">Step {i} of {len(steps)}</span>'
+            f'<li class="step" data-step="{i}"><div class="step-head"><span class="step-num">{t("step_of", i=i, n=len(steps))}</span>'
             f'<span class="step-title">{esc(step.get("title", ""))}</span></div>{term}'
             f'<div class="step-explain">{render_md(step["explain"], pages, prefix)}</div></li>')
     intro = f'<p class="steps-intro">{inline_md(walk["intro"], pages, prefix)}</p>' if walk.get("intro") else ""
     return (f'<section class="steps" data-steps><div class="steps-top"><h2 id="try-it">'
-            f'<span class="sec-icon">▶</span>{esc(walk.get("title", "Try it step by step"))}</h2>'
-            f'<button class="btn-ghost" data-show-all>Show all</button></div>{intro}'
+            f'<span class="sec-icon">▶</span>{esc(walk.get("title", t("try_it")))}</h2>'
+            f'<button class="btn-ghost" data-show-all>{t("show_all")}</button></div>{intro}'
             f'<ol class="step-list">{"".join(items)}</ol>'
-            f'<div class="step-nav"><button class="btn" data-prev>← Back</button>'
+            f'<div class="step-nav"><button class="btn" data-prev>{t("back")}</button>'
             f'<div class="step-dots" aria-hidden="true"></div>'
-            f'<button class="btn btn-primary" data-next>Next →</button></div></section>')
+            f'<button class="btn btn-primary" data-next>{t("next")}</button></div></section>')
 
 
 def render_checks(checks: list, pages, prefix) -> str:
     items = "".join(
         f'<details class="check"><summary><span class="check-q">{inline_md(c["q"], pages, prefix)}</span>'
-        f'<span class="check-reveal">Reveal answer</span></summary>'
+        f'<span class="check-reveal">{t("reveal")}</span></summary>'
         f'<div class="check-a">{render_md(c["a"], pages, prefix)}</div></details>'
         for c in checks)
-    return (f'<section class="checks"><h2 id="check-yourself"><span class="sec-icon">?</span>Check yourself</h2>'
-            f'<p class="muted">Answer in your head first, then reveal.</p>{items}</section>')
+    return (f'<section class="checks"><h2 id="check-yourself"><span class="sec-icon">?</span>{t("check_yourself")}</h2>'
+            f'<p class="muted">{t("check_hint")}</p>{items}</section>')
 
 
 # ---------------------------------------------------------------- quizzes
@@ -301,18 +317,18 @@ def quiz_minutes(quiz: dict) -> int:
 
 def render_question(n: int, q: dict, pages, prefix) -> str:
     kind = q.get("type", "choice")
-    head = (f'<div class="q-head"><span class="q-num">Question {n}</span>'
+    head = (f'<div class="q-head"><span class="q-num">{t("question_n", n=n)}</span>'
             f'<span class="q-verdict" aria-live="polite"></span></div>'
             f'<div class="q-text">{render_md(str(q["q"]), pages, prefix)}</div>')
     if kind == "open":
         points = "".join(f'<li><label><input type="checkbox" data-point>'
                          f'<span>{inline_md(str(p), pages, prefix)}</span></label></li>' for p in q["points"])
-        body = (f'<textarea class="q-answer" rows="4" aria-label="Your answer to question {n}" '
-                f'placeholder="Answer in your own words…"></textarea>'
-                f'<div class="q-model"><h3>Model answer</h3>{render_md(str(q["answer"]), pages, prefix)}'
-                f'<p class="q-hint">Tick each point your answer covered:</p><ul class="points">{points}'
+        body = (f'<textarea class="q-answer" rows="4" aria-label="{t("your_answer", n=n)}" '
+                f'placeholder="{t("answer_placeholder")}"></textarea>'
+                f'<div class="q-model"><h3>{t("model_answer")}</h3>{render_md(str(q["answer"]), pages, prefix)}'
+                f'<p class="q-hint">{t("tick_points")}</p><ul class="points">{points}'
                 f'<li class="point-none"><label><input type="checkbox" data-none>'
-                f'<span>None of these</span></label></li></ul></div>')
+                f'<span data-en="{i18n.EN["none_of_these"]}">{t("none_of_these")}</span></label></li></ul></div>')
     else:
         multi = sum(bool(o.get("correct")) for o in q["options"]) > 1
         itype = "checkbox" if multi else "radio"
@@ -322,7 +338,7 @@ def render_question(n: int, q: dict, pages, prefix) -> str:
             opts.append(f'<li class="opt" data-correct="{int(bool(o.get("correct")))}"><label>'
                         f'<input type="{itype}" name="q{n}"><span class="opt-text">'
                         f'{inline_md(str(o["text"]), pages, prefix)}</span></label>{why}</li>')
-        hint = '<p class="q-hint">Select all that apply.</p>' if multi else ""
+        hint = f'<p class="q-hint">{t("select_all")}</p>' if multi else ""
         body = f'{hint}<ul class="opts">{"".join(opts)}</ul>'
     explain = f'<div class="q-explain">{render_md(str(q["explain"]), pages, prefix)}</div>' if q.get("explain") else ""
     return (f'<li class="question" data-type="{esc(kind)}" data-objective="{q["objective"]}">'
@@ -335,37 +351,34 @@ def quiz_page(page: Page, quiz: dict, pages, curriculum) -> str:
     title = page.meta["title"]
     questions = quiz["questions"]
     n_open = sum(q.get("type") == "open" for q in questions)
-    intro = quiz.get("intro") or (f"{len(questions)} questions covering every learning objective. "
-                                  "Answer them all, then check your answers to see what you've mastered.")
+    intro = quiz.get("intro") or t("quiz_intro", n=len(questions))
     topic_href = f"{prefix}topics/{slug}.html"
-    head = (f'<header class="page-head"><p class="eyebrow">Assessment</p><h1>{esc(title)}</h1>'
+    head = (f'<header class="page-head"><p class="eyebrow">{t("assessment")}</p><h1>{esc(title)}</h1>'
             f'<p class="lead">{inline_md(intro, pages, prefix)}</p>'
-            f'<div class="chips"><span class="chip">{len(questions)} questions</span>'
-            f'<span class="chip">~{quiz_minutes(quiz)} min</span>'
-            f'<span class="chip chip-plain"><a href="{topic_href}">← Back to the lesson</a></span>'
+            f'<div class="chips"><span class="chip">{t("n_questions", n=len(questions))}</span>'
+            f'<span class="chip">{t("min", n=quiz_minutes(quiz))}</span>'
+            f'<span class="chip chip-plain"><a href="{topic_href}">← {t("back_to_lesson")}</a></span>'
             f'<span class="chip chip-score" data-quiz-score="{slug}" hidden></span></div></header>')
     rows = "".join(
         f'<li data-obj="{i}"><div class="or-top"><span class="or-text">{inline_md(text, pages, prefix)}</span>'
         f'<span class="or-status"></span></div><div class="bar"><span></span></div></li>'
         for i, text in enumerate(objectives(page), 1))
-    self_note = (f'<p class="muted" data-self-note>Includes {n_open} written answer{"s" if n_open > 1 else ""} '
-                 f'you grade yourself: tick the points you covered and the score updates.</p>') if n_open else ""
-    results = (f'<section class="results" data-results hidden><h2 id="results">Your results</h2>'
+    self_note = f'<p class="muted" data-self-note>{t("self_note", n=n_open)}</p>' if n_open else ""
+    results = (f'<section class="results" data-results hidden><h2 id="results">{t("your_results")}</h2>'
                f'<div class="score"><span class="score-num" data-score></span><span class="score-label" data-score-label></span></div>'
-               f'{self_note}<h3>By learning objective</h3><ol class="obj-results">{rows}</ol>'
-               f'<div class="results-actions"><button type="button" class="btn btn-primary" data-copy>Copy results for Claude</button>'
-               f'<button type="button" class="btn" data-retake>Retake</button>'
-               f'<a class="btn" href="{topic_href}">Back to the lesson</a></div>'
-               f'<p class="muted copy-help">Paste the results into Claude Code with <code>/assess</code> for '
-               f'feedback on your written answers and what to review next.</p>'
-               f'<textarea class="copy-fallback" readonly hidden aria-label="Results text"></textarea></section>')
+               f'{self_note}<h3>{t("by_objective")}</h3><ol class="obj-results">{rows}</ol>'
+               f'<div class="results-actions"><button type="button" class="btn btn-primary" data-copy>{t("copy_results")}</button>'
+               f'<button type="button" class="btn" data-retake>{t("retake")}</button>'
+               f'<a class="btn" href="{topic_href}">{t("back_to_lesson")}</a></div>'
+               f'<p class="muted copy-help">{t("copy_help")}</p>'
+               f'<textarea class="copy-fallback" readonly hidden aria-label="{t("results_text")}"></textarea></section>')
     form = (f'<form class="quiz" data-quiz="{slug}" data-title="{esc(title)}" novalidate>'
             f'<ol class="questions">{"".join(render_question(i, q, pages, prefix) for i, q in enumerate(questions, 1))}</ol>'
-            f'<div class="quiz-submit"><button class="btn btn-primary btn-lg" type="submit">Check answers</button>'
+            f'<div class="quiz-submit"><button class="btn btn-primary btn-lg" type="submit">{t("check_answers")}</button>'
             f'<p class="muted" data-unanswered></p></div></form>'
-            f'<noscript><p class="callout-note">This quiz needs JavaScript to grade your answers.</p></noscript>')
+            f'<noscript><p class="callout-note">{t("noscript_quiz")}</p></noscript>')
     body = f'<article class="quiz-page">{head}{results}{form}{sources_footer(page, pages, prefix)}</article>'
-    return layout(f"Quiz: {title}", body, curriculum, pages, prefix, current=slug)
+    return layout(t("quiz_title", title=title), body, curriculum, pages, prefix, current=slug)
 
 
 # ---------------------------------------------------------------- layout
@@ -382,18 +395,18 @@ def sidebar(curriculum: dict, pages, prefix: str, current: str | None) -> str:
         open_ = " open" if current in module["topics"] or current is None else ""
         mods.append(f'<details class="nav-module"{open_}><summary><span class="mod-num">{n}</span>'
                     f'{esc(module["title"])}</summary><ul>{links}</ul></details>')
-    return (f'<nav class="sidebar" aria-label="Course"><a class="brand" href="{prefix}index.html">'
-            f'{esc(curriculum.get("title", "Knowledge base"))}</a>'
+    return (f'<nav class="sidebar" aria-label="{t("course")}"><a class="brand" href="{prefix}index.html">'
+            f'{esc(curriculum.get("title", t("kb_title")))}</a>'
             f'<div class="progress-mini"><div class="bar"><span data-progress-bar></span></div>'
             f'<span data-progress-text></span></div>{"".join(mods)}'
-            f'<a class="nav-extra" href="{prefix}glossary.html">Glossary</a></nav>')
+            f'<a class="nav-extra" href="{prefix}glossary.html">{t("glossary")}</a></nav>')
 
 
 def layout(title: str, body: str, curriculum: dict, pages, prefix: str,
            current: str | None = None, body_class: str = "") -> str:
-    site_title = curriculum.get("title", "Knowledge base")
+    site_title = curriculum.get("title", t("kb_title"))
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{i18n.lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -402,8 +415,8 @@ def layout(title: str, body: str, curriculum: dict, pages, prefix: str,
 <link rel="stylesheet" href="{prefix}assets/code.css">
 </head>
 <body class="{body_class}">
-<a class="skip" href="#main">Skip to content</a>
-<button class="menu-btn" aria-label="Open course menu" data-menu>☰</button>
+<a class="skip" href="#main">{t("skip")}</a>
+<button class="menu-btn" aria-label="{t("open_menu")}" data-menu>☰</button>
 <div class="shell">
 {sidebar(curriculum, pages, prefix, current)}
 <main id="main">{body}</main>
@@ -423,9 +436,14 @@ def chips(page: Page, lesson, pages, prefix) -> str:
     pre = ""
     if prereqs:
         links = ", ".join(f'<a href="{prefix}topics/{p}.html">{esc(pages[p].meta["title"])}</a>' for p in prereqs)
-        pre = f'<span class="chip chip-plain">Before this: {links}</span>'
-    return (f'<div class="chips"><span class="chip chip-{esc(diff)}">{esc(diff)}</span>'
-            f'<span class="chip">~{minutes(page, lesson)} min</span>{pre}</div>')
+        pre = f'<span class="chip chip-plain">{t("before_this")} {links}</span>'
+    return (f'<div class="chips">{difficulty_chip(diff)}'
+            f'<span class="chip">{t("min", n=minutes(page, lesson))}</span>{pre}</div>')
+
+
+def difficulty_chip(diff: str) -> str:
+    # The class keeps the English level, which the stylesheet colours by.
+    return f'<span class="chip chip-{esc(diff)}">{esc(t(diff) if diff else "")}</span>'
 
 
 # ---------------------------------------------------------------- pages
@@ -441,7 +459,7 @@ def topic_page(page: Page, pages, curriculum, lessons, quizzes, order: list[str]
            f'<p class="lead">{inline_md(page.meta.get("summary", ""), pages, prefix)}</p>'
            f'{chips(page, lesson, pages, prefix)}</header>']
     if lesson and lesson.get("hook"):
-        out.append(f'<aside class="hook"><span class="hook-label">Imagine this</span>'
+        out.append(f'<aside class="hook"><span class="hook-label">{t("imagine")}</span>'
                    f'{render_md(lesson["hook"], pages, prefix)}</aside>')
 
     for heading, md in split_sections(page.body):
@@ -452,15 +470,15 @@ def topic_page(page: Page, pages, curriculum, lessons, quizzes, order: list[str]
                 f'<li><label><input type="checkbox" data-objective="{slug}:{i}">'
                 f'<span>{inline_md(item, pages, prefix)}</span></label></li>'
                 for i, item in enumerate(list_items(md)))
-            out.append(f'<section class="objectives" id="{anchor}"><h2>By the end you can…</h2>'
-                       f'<p class="muted">Tick each one off when you feel confident.</p>'
+            out.append(f'<section class="objectives" id="{anchor}"><h2>{t("objectives")}</h2>'
+                       f'<p class="muted">{t("objectives_hint")}</p>'
                        f'<ul class="checklist">{items}</ul></section>')
             continue
         icon = SECTION_ICONS.get(key, "")
         icon_html = f'<span class="sec-icon">{icon}</span>' if icon else ""
         cls = "pitfalls" if key == "common pitfalls" else "summary" if key == "summary" else ""
-        out.append(f'<section class="prose {cls}" id="{anchor}"><h2>{icon_html}{esc(heading)}</h2>'
-                   f'{render_md(md, pages, prefix)}</section>')
+        out.append(f'<section class="prose {cls}" id="{anchor}"><h2>{icon_html}{esc(heading_label(heading))}</h2>'
+                   f'{render_md(localize_headings(md), pages, prefix)}</section>')
         if key == "overview" and lesson and lesson.get("flow"):
             out.append(render_flow(lesson["flow"], pages, prefix))
         if key == "walkthrough" and lesson and lesson.get("walkthrough"):
@@ -473,25 +491,24 @@ def topic_page(page: Page, pages, curriculum, lessons, quizzes, order: list[str]
     cards = "".join(
         f'<button class="card" aria-pressed="false"><span class="card-front">{esc(pages[c].meta["title"])}</span>'
         f'<span class="card-back">{esc(pages[c].meta.get("definition", ""))}'
-        f'<a href="{prefix}concepts/{c}.html">Open →</a></span></button>'
+        f'<a href="{prefix}concepts/{c}.html">{t("open")}</a></span></button>'
         for c in concepts)
-    out.append(f'<section class="flashcards"><h2 id="key-concepts">Key concepts</h2>'
-               f'<p class="muted">Recall the definition, then flip the card to check.</p>'
+    out.append(f'<section class="flashcards"><h2 id="key-concepts">{t("key_concepts")}</h2>'
+               f'<p class="muted">{t("flashcards_hint")}</p>'
                f'<div class="cards">{cards}</div></section>')
 
     if slug in quizzes:
         quiz = quizzes[slug]
-        out.append(f'<section class="quiz-cta"><div><h2 id="quiz"><span class="sec-icon">★</span>Test yourself</h2>'
-                   f'<p class="muted">{len(quiz["questions"])} questions · ~{quiz_minutes(quiz)} min. '
-                   f'Find out which objectives you\'ve mastered and which need another look.</p>'
+        out.append(f'<section class="quiz-cta"><div><h2 id="quiz"><span class="sec-icon">★</span>{t("test_yourself")}</h2>'
+                   f'<p class="muted">{t("quiz_cta", n=len(quiz["questions"]), m=quiz_minutes(quiz))}</p>'
                    f'<span class="chip chip-score" data-quiz-score="{slug}" hidden></span></div>'
-                   f'<a class="btn btn-primary btn-lg" href="{prefix}quizzes/{slug}.html">Take the quiz →</a></section>')
+                   f'<a class="btn btn-primary btn-lg" href="{prefix}quizzes/{slug}.html">{t("take_quiz")}</a></section>')
 
     i = order.index(slug)
-    prev_ = f'<a class="pn prev" href="{order[i - 1]}.html"><small>Previous</small>{esc(pages[order[i - 1]].meta["title"])}</a>' if i > 0 else "<span></span>"
-    next_ = f'<a class="pn next" href="{order[i + 1]}.html"><small>Next</small>{esc(pages[order[i + 1]].meta["title"])}</a>' if i < len(order) - 1 else "<span></span>"
+    prev_ = f'<a class="pn prev" href="{order[i - 1]}.html"><small>{t("previous")}</small>{esc(pages[order[i - 1]].meta["title"])}</a>' if i > 0 else "<span></span>"
+    next_ = f'<a class="pn next" href="{order[i + 1]}.html"><small>{t("next_topic")}</small>{esc(pages[order[i + 1]].meta["title"])}</a>' if i < len(order) - 1 else "<span></span>"
     out.append(f'<div class="complete"><button class="btn btn-primary btn-lg" data-complete="{slug}">'
-               f'Mark topic as complete</button></div><nav class="prevnext">{prev_}{next_}</nav>')
+               f'{t("mark_complete")}</button></div><nav class="prevnext">{prev_}{next_}</nav>')
     out.append(sources_footer(page, pages, prefix))
     return layout(page.meta["title"], f'<article class="topic">{"".join(out)}</article>',
                   curriculum, pages, prefix, current=slug)
@@ -504,7 +521,7 @@ def sources_footer(page: Page, pages, prefix) -> str:
         title = pages[doc].meta["title"] if doc in pages else doc
         section = f' — {esc(s["section"])}' if isinstance(s, dict) and s.get("section") else ""
         rows.append(f'<li><a href="{prefix}sources/{doc}.html">{esc(title)}</a>{section}</li>')
-    return f'<footer class="sources"><h2>Sources</h2><ul>{"".join(rows)}</ul></footer>' if rows else ""
+    return f'<footer class="sources"><h2>{t("sources")}</h2><ul>{"".join(rows)}</ul></footer>' if rows else ""
 
 
 def concept_page(page: Page, pages, curriculum, backlinks) -> str:
@@ -512,19 +529,19 @@ def concept_page(page: Page, pages, curriculum, backlinks) -> str:
     used_in = [s for s in backlinks.get(page.slug, []) if pages[s].kind == "topic"]
     related = [r for r in page.meta.get("related") or [] if r in pages]
     aliases = page.meta.get("aliases") or []
-    aka = f'<p class="aka">Also called: {", ".join(esc(a) for a in aliases)}</p>' if aliases else ""
+    aka = f'<p class="aka">{t("also_called")} {", ".join(esc(a) for a in aliases)}</p>' if aliases else ""
     side = ""
     if used_in:
-        side += '<h3>Taught in</h3><ul>' + "".join(
+        side += f'<h3>{t("taught_in")}</h3><ul>' + "".join(
             f'<li><a href="{prefix}topics/{t}.html">{esc(pages[t].meta["title"])}</a></li>' for t in used_in) + "</ul>"
     if related:
-        side += '<h3>Related</h3><ul>' + "".join(
+        side += f'<h3>{t("related")}</h3><ul>' + "".join(
             f'<li><a class="wl wl-concept" data-slug="{r}" href="{prefix}{FOLDER[pages[r].kind]}/{r}.html">'
             f'{esc(pages[r].meta["title"])}</a></li>' for r in related) + "</ul>"
-    body = (f'<article class="concept"><header class="page-head"><p class="eyebrow">Concept</p>'
+    body = (f'<article class="concept"><header class="page-head"><p class="eyebrow">{t("concept")}</p>'
             f'<h1>{esc(page.meta["title"])}</h1>{aka}</header>'
-            f'<div class="definition"><span>Definition</span><p>{esc(page.meta.get("definition", ""))}</p></div>'
-            f'<div class="concept-grid"><div class="prose">{render_md(page.body, pages, prefix)}</div>'
+            f'<div class="definition"><span>{t("definition")}</span><p>{esc(page.meta.get("definition", ""))}</p></div>'
+            f'<div class="concept-grid"><div class="prose">{render_md(localize_headings(page.body), pages, prefix)}</div>'
             f'<aside class="concept-side">{side}</aside></div>{sources_footer(page, pages, prefix)}</article>')
     return layout(page.meta["title"], body, curriculum, pages, prefix)
 
@@ -534,10 +551,10 @@ def source_page(page: Page, pages, curriculum) -> str:
     meta = page.meta
     by = ", ".join(meta.get("authors") or [])
     extra = " · ".join(esc(x) for x in [by, meta.get("year"), meta.get("published")] if x)
-    url = f'<p><a href="{esc(meta["url"])}">Original document ↗</a></p>' if meta.get("url") else ""
-    body = (f'<article class="source"><header class="page-head"><p class="eyebrow">Source document</p>'
+    url = f'<p><a href="{esc(meta["url"])}">{t("original_document")}</a></p>' if meta.get("url") else ""
+    body = (f'<article class="source"><header class="page-head"><p class="eyebrow">{t("source_document")}</p>'
             f'<h1>{esc(meta["title"])}</h1><p class="muted">{extra}</p>{url}</header>'
-            f'<div class="prose">{render_md(page.body, pages, prefix)}</div></article>')
+            f'<div class="prose">{render_md(localize_headings(page.body), pages, prefix)}</div></article>')
     return layout(meta["title"], body, curriculum, pages, prefix)
 
 
@@ -546,33 +563,32 @@ def index_page(pages, curriculum, lessons, quizzes) -> str:
     mods = []
     for n, module in enumerate(curriculum["modules"], 1):
         items = []
-        for t in module["topics"]:
-            p = pages[t]
-            score = f'<span class="chip chip-score" data-quiz-score="{t}" hidden></span>' if t in quizzes else ""
+        for slug in module["topics"]:
+            p = pages[slug]
+            score = f'<span class="chip chip-score" data-quiz-score="{slug}" hidden></span>' if slug in quizzes else ""
             items.append(
-                f'<li><a class="topic-row" href="topics/{t}.html" data-topic="{t}">'
+                f'<li><a class="topic-row" href="topics/{slug}.html" data-topic="{slug}">'
                 f'<span class="done-dot" aria-hidden="true"></span><span class="tr-main">'
                 f'<span class="tr-title">{esc(p.meta["title"])}</span>'
                 f'<span class="tr-sum">{esc(p.meta.get("summary", ""))}</span></span>'
-                f'<span class="tr-meta"><span class="chip chip-{esc(p.meta.get("difficulty", ""))}">'
-                f'{esc(p.meta.get("difficulty", ""))}</span><span class="chip">~{minutes(p, lessons.get(t))} min</span>'
+                f'<span class="tr-meta">{difficulty_chip(p.meta.get("difficulty", ""))}'
+                f'<span class="chip">{t("min", n=minutes(p, lessons.get(slug)))}</span>'
                 f'{score}</span></a></li>')
         mods.append(f'<section class="module-card"><div class="module-head"><span class="mod-num">{n}</span>'
                     f'<div><h2>{esc(module["title"])}</h2><p class="muted">{esc(module.get("summary", ""))}</p>'
                     f'</div></div><ul class="topic-list">{"".join(items)}</ul></section>')
     counts = {k: sum(p.kind == k for p in pages.values()) for k in FOLDER}
     first = curriculum["modules"][0]["topics"][0]
-    body = (f'<div class="home"><header class="hero"><p class="eyebrow">Your learning path</p>'
-            f'<h1>{esc(curriculum.get("title", "Knowledge base"))}</h1>'
-            f'<p class="lead">{counts["topic"]} topics in {len(curriculum["modules"])} modules, '
-            f'{counts["concept"]} concepts, built from {counts["source"]} source documents.</p>'
+    body = (f'<div class="home"><header class="hero"><p class="eyebrow">{t("learning_path")}</p>'
+            f'<h1>{esc(curriculum.get("title", t("kb_title")))}</h1>'
+            f'<p class="lead">{t("home_lead", topics=counts["topic"], modules=len(curriculum["modules"]), concepts=counts["concept"], sources=counts["source"])}</p>'
             f'<div class="hero-progress"><div class="bar bar-lg"><span data-progress-bar></span></div>'
             f'<span data-progress-text></span></div>'
-            f'<a class="btn btn-primary btn-lg" data-continue href="topics/{first}.html">Start learning →</a>'
-            f'</header><div class="search"><input type="search" placeholder="Search topics and concepts…" '
-            f'aria-label="Search" data-search><ul class="search-results" hidden></ul></div>'
+            f'<a class="btn btn-primary btn-lg" data-continue href="topics/{first}.html">{t("start")}</a>'
+            f'</header><div class="search"><input type="search" placeholder="{t("search_placeholder")}" '
+            f'aria-label="{t("search")}" data-search><ul class="search-results" hidden></ul></div>'
             f'{"".join(mods)}</div>')
-    return layout(curriculum.get("title", "Home"), body, curriculum, pages, prefix, body_class="is-home")
+    return layout(curriculum.get("title", t("home")), body, curriculum, pages, prefix, body_class="is-home")
 
 
 def glossary_page(pages, curriculum) -> str:
@@ -583,11 +599,11 @@ def glossary_page(pages, curriculum) -> str:
         f'<li data-filter="{esc((p.meta["title"] + " " + " ".join(p.meta.get("aliases") or [])).lower())}">'
         f'<a href="concepts/{p.slug}.html">{esc(p.meta["title"])}</a>'
         f'<p>{esc(p.meta.get("definition", ""))}</p></li>' for p in concepts)
-    body = (f'<article class="glossary"><header class="page-head"><p class="eyebrow">Reference</p>'
-            f'<h1>Glossary</h1><p class="lead">Every concept in the knowledge base, A–Z.</p></header>'
-            f'<input type="search" class="filter" placeholder="Filter…" aria-label="Filter glossary" data-filter-input>'
+    body = (f'<article class="glossary"><header class="page-head"><p class="eyebrow">{t("reference")}</p>'
+            f'<h1>{t("glossary")}</h1><p class="lead">{t("glossary_lead")}</p></header>'
+            f'<input type="search" class="filter" placeholder="{t("filter")}" aria-label="{t("filter_glossary")}" data-filter-input>'
             f'<ul class="gloss-list">{rows}</ul></article>')
-    return layout("Glossary", body, curriculum, pages, prefix)
+    return layout(t("glossary"), body, curriculum, pages, prefix)
 
 
 # ---------------------------------------------------------------- build
@@ -601,6 +617,7 @@ def data_js(pages, curriculum) -> str:
         "concepts": {s: {"title": p.meta["title"], "definition": p.meta.get("definition", ""),
                          "aliases": p.meta.get("aliases") or []}
                      for s, p in pages.items() if p.kind == "concept"},
+        **i18n.js_strings(),
     }
     return "window.KB = " + json.dumps(data, ensure_ascii=False) + ";\n"
 
@@ -624,6 +641,7 @@ def build(only: list[str] | None = None) -> int:
     if not CURRICULUM.exists():
         print(NO_KB)
         return 1
+    i18n.use()
     report = Report()
     pages = load_pages(report)
     curriculum = read_json(CURRICULUM)

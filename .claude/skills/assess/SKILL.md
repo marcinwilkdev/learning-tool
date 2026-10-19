@@ -95,6 +95,10 @@ the next step. Don't repeat questions the learner got right unless their reasoni
 shaky.
 
 ## Content rules
+- **Language.** Write questions, options and answers in the wiki's language (`lang` in
+  `kb/site.json`, English if absent). Keep the YAML keys in English. Pasted results always
+  arrive in English labels (`Assessment results:`, `Solid`, `Shaky`, `Review`), whatever the
+  site's language.
 - **Grounded.** Every correct answer, `why` and model answer must come from the wiki or the
   cited raw sections. Don't test commands, flags or behaviour the sources don't describe.
 - **Test understanding, not wording.** Prefer prediction ("What happens if…"), diagnosis

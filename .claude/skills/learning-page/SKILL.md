@@ -57,6 +57,8 @@ into a guided lesson. The generator places each piece into the page.
    `/assess <slug>` so the learner can test themselves afterwards.
 
 ## Content rules
+- **Language.** Write in the wiki's language (`lang` in `kb/site.json`, English if absent).
+  Keep the YAML keys in English.
 - **Grounded.** Every fact must come from the wiki or the cited raw sections.
   Don't add commands, flags or behaviour the sources don't describe.
 - **Terminal output.** Use output from the sources when they show it (reformatted
