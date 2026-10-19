@@ -302,6 +302,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .obj-results .bar span.bad { background: var(--accent); }
 .results-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 .copy-help { font-size: .85rem; margin: 10px 0 0; }
+.saved-note { font-size: .9rem; margin: 12px 0 0; padding: 10px 12px; border-radius: 8px;
+  background: var(--good-soft); color: var(--good); }
+.saved-note[hidden] { display: none; }
 .copy-fallback { width: 100%; min-height: 160px; margin-top: 10px; font: .8rem/1.5 var(--mono); padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
 
 /* ---------- flashcards ---------- */

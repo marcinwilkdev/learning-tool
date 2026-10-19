@@ -4,3 +4,5 @@ __pycache__/
 site/
 # Build activity log for the admin panel (`uv run learnkb-admin`); local state.
 .learnkb/
+# Quiz results posted by the site (`uv run learnkb-serve`), waiting for /assess.
+learner/inbox/

@@ -204,6 +204,9 @@
     const results = document.querySelector("[data-results]");
     const unanswered = form.querySelector("[data-unanswered]");
     const copyBtn = results.querySelector("[data-copy]");
+    const savedNote = results.querySelector("[data-saved]");
+    const copyHelp = results.querySelector("[data-copy-help]");
+    let attempt = null;
     const fallback = results.querySelector(".copy-fallback");
 
     function shuffle() {
@@ -310,6 +313,21 @@
       return lines.join("\n");
     }
 
+    // Served by `learnkb-serve`, the results are saved to learner/inbox/ for /assess. Each
+    // attempt has one file, re-saved whenever the self-grading ticks change. Anywhere else
+    // (file://, a plain static server) the post fails quietly and the copy button remains.
+    let saveTimer = null;
+    function save() {
+      if (!attempt || location.protocol === "file:") return;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        fetch(PREFIX + "api/results", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic: slug, attempt, text: exportText() }),
+        }).then((r) => { if (r.ok) { savedNote.hidden = false; copyHelp.hidden = true; } }, () => {});
+      }, 300);
+    }
+
     form.addEventListener("input", countUnanswered);
     form.addEventListener("change", (e) => {
       if (!e.target.matches("[data-point], [data-none]")) return;
@@ -317,7 +335,7 @@
       const q = e.target.closest(".question");
       if (e.target.checked && e.target.matches("[data-none]")) q.querySelectorAll("[data-point]").forEach((p) => (p.checked = false));
       if (e.target.checked && e.target.matches("[data-point]")) q.querySelector("[data-none]").checked = false;
-      grade();
+      grade(); save();
     });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -331,6 +349,8 @@
         o.classList.toggle("is-chosen", chosen);
       });
       grade();
+      attempt = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+      save();
       results.hidden = false;
       results.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -341,6 +361,7 @@
       form.querySelectorAll(".opt").forEach((o) => o.classList.remove("is-correct", "is-wrong", "is-chosen"));
       form.querySelectorAll(".q-verdict").forEach((v) => { v.textContent = ""; delete v.dataset.en; v.className = "q-verdict"; });
       results.hidden = true; fallback.hidden = true;
+      attempt = null; savedNote.hidden = true; copyHelp.hidden = false;
       copyBtn.textContent = t("copy_results");
       shuffle(); countUnanswered();
       window.scrollTo({ top: 0, behavior: "smooth" });

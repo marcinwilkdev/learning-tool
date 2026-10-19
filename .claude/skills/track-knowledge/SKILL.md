@@ -31,7 +31,8 @@ How the script turns records into state:
   objective is solid. Otherwise *not assessed*.
 
 ## Arguments
-- Pasted `Assessment results:` text, or nothing right after an `/assess` review: record it.
+- Pasted `Assessment results:` text, a file in `learner/inbox/`, or nothing right after an
+  `/assess` review: record it. Delete an inbox file once its record is saved.
 - `status` or a topic: show the current state (`uv run learnkb-learner status [topic]`) and
   recommend what to do next.
 

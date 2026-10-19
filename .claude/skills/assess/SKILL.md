@@ -16,7 +16,9 @@ The page grades itself in the browser:
   points their answer covered.
 - **Results** give a score per learning objective: Solid (80% or more), Shaky (50% or
   more) or Review. Solid objectives are ticked off on the topic page. The page also has a
-  **Copy results for Claude** button, which exports every answer as text.
+  **Copy results for Claude** button, which exports every answer as text. When the site is
+  served by `uv run learnkb-serve`, the page also saves that text by itself to
+  `learner/inbox/<topic>--<attempt>.txt`, so the learner doesn't need to paste it.
 
 So this skill has two modes. Pick one from the arguments.
 
@@ -25,7 +27,8 @@ So this skill has two modes. Pick one from the arguments.
 - Pasted text starting with `Assessment results:`: **review** it (mode B).
 - `all`: write quizzes for every topic that doesn't have one. Ask before overwriting
   existing ones.
-- Nothing: list the topics from `kb/curriculum.json`, showing whether each one has a lesson
+- Nothing: if `learner/inbox/` holds result files, **review** them (mode B), oldest first.
+  Otherwise list the topics from `kb/curriculum.json`, showing whether each one has a lesson
   and a quiz, and ask which one to assess.
 
 ## Mode A: write a quiz
@@ -64,7 +67,8 @@ So this skill has two modes. Pick one from the arguments.
 
 ## Mode B: review pasted results
 
-The pasted text lists the score, each objective's status and every question: what the
+The results come pasted, or as files in `learner/inbox/` (one per attempt; a later save of
+the same attempt has overwritten the earlier one, so each file is final). The text lists the score, each objective's status and every question: what the
 learner chose, or what they wrote and which key points they ticked.
 
 1. Read `kb/quizzes/<slug>.yaml`, the topic page and the relevant concept pages. Grade
@@ -88,7 +92,8 @@ learner chose, or what they wrote and which key points they ticked.
    every attempt.
 7. **Record it.** Save your re-graded result to the learner's knowledge database by
    following `.claude/skills/track-knowledge/SKILL.md`, and mention it in one line of the
-   review.
+   review. Once it's recorded, delete the inbox file it came from: the record keeps the
+   text in `raw`.
 
 Keep the review short: an overall verdict, then misconceptions with links to review, then
 the next step. Don't repeat questions the learner got right unless their reasoning was

@@ -370,7 +370,8 @@ def quiz_page(page: Page, quiz: dict, pages, curriculum) -> str:
                f'<div class="results-actions"><button type="button" class="btn btn-primary" data-copy>{t("copy_results")}</button>'
                f'<button type="button" class="btn" data-retake>{t("retake")}</button>'
                f'<a class="btn" href="{topic_href}">{t("back_to_lesson")}</a></div>'
-               f'<p class="muted copy-help">{t("copy_help")}</p>'
+               f'<p class="muted copy-help" data-copy-help>{t("copy_help")}</p>'
+               f'<p class="saved-note" data-saved hidden>✓ {t("saved")}</p>'
                f'<textarea class="copy-fallback" readonly hidden aria-label="{t("results_text")}"></textarea></section>')
     form = (f'<form class="quiz" data-quiz="{slug}" data-title="{esc(title)}" novalidate>'
             f'<ol class="questions">{"".join(render_question(i, q, pages, prefix) for i, q in enumerate(questions, 1))}</ol>'

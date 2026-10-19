@@ -120,6 +120,8 @@ EN = {
     "retake": "Retake",
     "copy_help": ("Paste the results into Claude Code with <code>/assess</code> for feedback on your "
                   "written answers and what to review next."),
+    "saved": ("Saved for Claude: run <code>/assess</code> in Claude Code for feedback on your written "
+              "answers and what to review next. No copying needed."),
     "results_text": "Results text",
     "check_answers": "Check answers",
     "noscript_quiz": "This quiz needs JavaScript to grade your answers.",
@@ -241,6 +243,8 @@ PL = {
     "retake": "Rozwiąż ponownie",
     "copy_help": ("Wklej wyniki do Claude Code razem z <code>/assess</code>, żeby dostać ocenę "
                   "odpowiedzi pisemnych i wskazówki, co powtórzyć."),
+    "saved": ("Zapisano dla Claude'a: wpisz <code>/assess</code> w Claude Code, żeby dostać ocenę "
+              "odpowiedzi pisemnych i wskazówki, co powtórzyć. Nie trzeba nic kopiować."),
     "results_text": "Tekst wyników",
     "check_answers": "Sprawdź odpowiedzi",
     "noscript_quiz": "Do oceny odpowiedzi ten quiz potrzebuje JavaScriptu.",

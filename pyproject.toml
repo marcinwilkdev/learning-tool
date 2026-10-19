@@ -16,6 +16,7 @@ learnkb-check = "learnkb.check:main"
 learnkb-site = "learnkb.site:main"
 learnkb-learner = "learnkb.learner:main"
 learnkb-admin = "learnkb.admin:main"
+learnkb-serve = "learnkb.serve:main"
 
 [build-system]
 requires = ["hatchling"]

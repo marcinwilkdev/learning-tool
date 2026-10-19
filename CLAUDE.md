@@ -30,11 +30,13 @@ Then run `/ingest`, `/learning-page all` and `/assess <topic>`, and commit `libr
 and `learner/` on the branch.
 
 ## Daily loop
-1. `uv run learnkb-site`, then `python3 -m http.server 8000 -d site` and open
-   http://localhost:8000. Safari blocks pages opened from `file://`.
+1. `uv run learnkb-serve --open` (builds the site and serves it on http://localhost:8000).
+   Safari blocks pages opened from `file://`.
 2. Learn a topic on the site.
-3. `/assess <topic>`, then take the quiz on the site.
-4. Paste "Copy results for Claude" into Claude Code. It's reviewed and recorded in `learner/`.
+3. `/assess <topic>`, then take the quiz on the site. The page saves the results to
+   `learner/inbox/` by itself.
+4. Run `/assess` in Claude Code: it reviews the saved results and records them in `learner/`.
+   (Without `learnkb-serve`, paste "Copy results for Claude" instead.)
 5. Ask "what should I study next?" (the track-knowledge skill).
 6. Commit the progress on the learning branch.
 
@@ -46,5 +48,6 @@ and `learner/` on the branch.
 | `uv run learnkb-check` | validate the wiki and regenerate `kb/index.json` |
 | `uv run learnkb-site [topic…]` | render `site/` (a full build when no topics are given) |
 | `uv run learnkb-learner [record FILE \| rebuild \| status [topic]]` | the learner knowledge database |
+| `uv run learnkb-serve [--open] [--port N]` | build `site/` and serve it on http://localhost:8000; quiz results are saved to `learner/inbox/` |
 | `uv run learnkb-admin [--open]` | live admin panel on http://localhost:8001: build progress, coverage, health |
 | `uv run learnkb-admin step PHASE [MSG] [--doc D --part N\|N-M] [--skip]` | record a build step for the panel (used by /ingest); `read --skip` marks parts left unread on purpose |
