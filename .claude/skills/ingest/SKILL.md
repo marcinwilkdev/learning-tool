@@ -117,10 +117,10 @@ surrounding text states, or leave it out. Then:
    15–45 minutes) and may draw on several documents.
 4. Set `"wiki_built": true` for the document in the manifest.
 
-**Approval gate:** on the first ingest, or whenever you would add or restructure
-modules, show the user the proposed outline (modules → topics → key concepts)
-and wait for approval before writing topic pages. Adding concepts and extending
-existing topics doesn't need approval.
+**Outline:** don't stop for approval. Write the topic pages straight away, and on the
+first ingest, or whenever you add or restructure modules, put the outline
+(modules → topics → key concepts) in the report so the user can ask for changes
+afterwards.
 
 ### 4. Curriculum and log
 Update `kb/curriculum.json` so every topic sits in exactly one module, ordered
@@ -136,6 +136,8 @@ Summarise for the user:
 - documents processed
 - concepts created or updated
 - topics created or updated
+- the outline (modules → topics → key concepts), on the first ingest or when modules
+  changed, and that the user can ask to merge, split, rename or reorder topics
 - any contradictions you found
 - any badly parsed content in `kb/raw/`, such as garbled tables or OCR noise, starting
   from the outline's *Possible conversion losses*

@@ -18,9 +18,8 @@ stage, read that skill's `SKILL.md` and follow it, with the overrides listed her
 Paths are relative to the project root.
 
 ## Arguments
-- Nothing: run the whole pipeline. Stop once at the ingest approval gate.
-- `auto`: the same, but skip the approval gate. Show the outline in the final report
-  instead, so the user can ask for changes afterwards.
+- Nothing: run the whole pipeline without stopping. The outline goes in the final
+  report, so the user can ask for changes afterwards.
 - `from lessons` or `from quizzes`: start at that stage, for example to resume an
   interrupted run. Earlier stages must already be done (`uv run learnkb-check` passes).
 - `rebuild`: also overwrite existing lessons and quizzes. Ask once to confirm before
@@ -40,9 +39,8 @@ Paths are relative to the project root.
 Follow the ingest skill end to end, including progress steps for the admin panel and
 transcribing scanned pages.
 
-- **Approval gate.** Keep it, unless the argument is `auto`. This is the only stop in
-  the pipeline, so say so when you show the outline: "After you approve, I'll build
-  lessons and quizzes for all N topics without stopping."
+- **No stop at the outline.** Go straight on to stages 2 and 3 with the outline you
+  proposed. Keep it for the final report.
 - If no documents are pending and the wiki already passes `uv run learnkb-check`, skip
   to stage 2.
 - Don't give the ingest report yet. Keep its points for the final report.
@@ -94,7 +92,8 @@ once, yourself. If it fails again, list it in the report and continue.
 Keep it short:
 - documents ingested, and anything from the ingest report worth knowing: contradictions,
   badly parsed content, scanned documents and `[illegible]` passages
-- the outline (modules → topics), if the gate was skipped with `auto`
+- the outline (modules → topics), and that the user can ask to merge, split, rename or
+  reorder topics
 - topics built: lessons and quizzes written, skipped (already existed) or failed
 - gaps in the sources that limited lessons or quizzes, grouped by topic
 - how to start: http://localhost:8000 with `learnkb-serve` running (or double-click
