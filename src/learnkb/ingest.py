@@ -34,7 +34,6 @@ RAW = KB / "raw"
 MANIFEST = KB / "manifest.json"
 PART_CHARS = 60_000  # about 15k tokens: comfortably under one Read call's limit
 MIN_PAGE_TEXT = 20  # characters of text layer below which a page counts as scanned
-PAGE_BREAK = "<!-- page break -->"
 # Letters NFKD doesn't decompose into ASCII plus an accent.
 ASCII_LETTERS = str.maketrans({"ł": "l", "Ł": "L", "ø": "o", "Ø": "O", "đ": "d", "Đ": "D",
                                "ß": "ss", "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE"})
@@ -115,9 +114,17 @@ def scanned_pages(pdf: Path) -> list[int]:
         doc.close()
 
 
-def number_pages(markdown: str) -> str:
-    pages = markdown.split(PAGE_BREAK)
-    return "\n\n".join(f"<!-- page {n} -->\n\n{p.strip()}" for n, p in enumerate(pages, 1)) + "\n"
+def paged_markdown(doc) -> str:
+    """The document as Markdown with a `<!-- page N -->` marker before each page.
+
+    Exported page by page: docling's own page-break placeholder follows reading order and
+    can land a page late.
+    """
+    pages = range(1, doc.num_pages() + 1) if hasattr(doc, "num_pages") else []
+    if not pages:
+        return doc.export_to_markdown()
+    return "\n\n".join(f"<!-- page {n} -->\n\n{doc.export_to_markdown(page_no=n).strip()}"
+                         for n in pages) + "\n"
 
 
 # ---------------------------------------------------------------- outline
@@ -300,7 +307,7 @@ def ingest(force: bool = False) -> int:
             continue
 
         doc = result.document
-        (RAW / f"{slug}.md").write_text(number_pages(doc.export_to_markdown(page_break_placeholder=PAGE_BREAK)))
+        (RAW / f"{slug}.md").write_text(paged_markdown(doc))
         scanned = scanned_pages(pdf)
         docs[rel] = {
             "slug": slug,
