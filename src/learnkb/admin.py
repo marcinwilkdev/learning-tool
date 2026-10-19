@@ -12,6 +12,10 @@ from disk, so the panel can be started or restarted at any point of a build:
 - health: the same errors and warnings as `learnkb-check`
 - activity: build steps (see `learnkb-admin step`) and recently written files
 
+PDFs dropped on the panel are posted to `api/upload` and saved in library/, ready for
+`/ingest`; nothing is converted until then. Uploads are refused on main, which holds no
+subject content.
+
 `learnkb-admin step <phase> [message] [--doc SLUG] [--part N|N-M] [--skip]` records a
 build step for the panel; the ingest skill calls it as it works. `read --skip` marks
 parts deliberately left unread, such as a book's index, which the coverage figure then
@@ -27,9 +31,11 @@ import sys
 import threading
 import time
 import traceback
+import unicodedata
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from learnkb import activity
 from learnkb.check import CURRICULUM, SECTIONS, Report, as_list, check, load_pages, read_json
@@ -40,6 +46,8 @@ PAGE = Path(__file__).parent / "admin.html"
 WATCHED = [KB, LIBRARY, activity.ACTIVITY.parent]
 RECENT_FILES = 40
 HEALTH_LIMIT = 200
+MAX_UPLOAD = 500 * 1024 * 1024
+CHUNK = 1024 * 1024
 
 
 # ---------------------------------------------------------------- snapshot
@@ -154,6 +162,7 @@ def snapshot() -> dict:
     snap = {"generated_at": iso(time.time()), "branch": git_branch(), "kb": KB.exists(),
             "steps": steps[-60:], "phases": activity.PHASES}
     if not KB.exists():
+        snap["documents"] = documents({}, steps)  # PDFs added before the first /ingest
         return snap
 
     report = Report()
@@ -259,6 +268,66 @@ def handle_get(request: BaseHTTPRequestHandler, path: str, watcher: Watcher) -> 
         events(request, watcher)
     else:
         request.send_error(404)
+
+
+def reply(request: BaseHTTPRequestHandler, code: int, payload: dict) -> None:
+    body = json.dumps(payload).encode()
+    request.send_response(code)
+    request.send_header("Content-Type", "application/json")
+    request.send_header("Content-Length", str(len(body)))
+    request.end_headers()
+    request.wfile.write(body)
+
+
+def handle_post(request: BaseHTTPRequestHandler, path: str) -> None:
+    """Answer a POST for the panel; `path` is relative to where the panel is mounted."""
+    url = urlsplit(path)
+    if url.path != "api/upload":
+        return reply(request, 404, {"error": "not found"})
+    reply(request, *upload(request, (parse_qs(url.query).get("name") or [""])[0]))
+
+
+def upload(request: BaseHTTPRequestHandler, name: str) -> tuple[int, dict]:
+    """Save the request body as library/<name>, a new PDF."""
+    # Another site's page can't post here: application/pdf needs a CORS preflight, which
+    # this server never grants, and the Host check stops DNS rebinding.
+    if request.headers.get("Host", "").rsplit(":", 1)[0] not in ("localhost", "127.0.0.1"):
+        return 403, {"error": "uploads are only accepted from localhost"}
+    if request.headers.get("Content-Type") != "application/pdf":
+        return 415, {"error": "expected Content-Type: application/pdf"}
+    if git_branch() == "main":
+        return 409, {"error": "main holds no subject content: switch to a learn/<subject> branch first"}
+    name = unicodedata.normalize("NFC", Path(name.replace("\\", "/")).name.strip())
+    if not name.lower().endswith(".pdf") or name.startswith(".") or any(ord(c) < 32 for c in name):
+        return 400, {"error": "expected a .pdf file name"}
+    length = int(request.headers.get("Content-Length") or 0)
+    if not 0 < length <= MAX_UPLOAD:
+        return 413, {"error": f"empty or larger than {MAX_UPLOAD // 2**20} MB"}
+    target = LIBRARY / name
+    if target.exists():
+        return 409, {"error": f"library/{name} already exists"}
+
+    LIBRARY.mkdir(exist_ok=True)
+    partial = LIBRARY / f".{name}.part"  # hidden and not *.pdf: the panel ignores it until it's complete
+    try:
+        with partial.open("wb") as out:
+            left = length
+            while left:
+                chunk = request.rfile.read(min(CHUNK, left))
+                if not chunk:
+                    return 400, {"error": "upload cut short"}
+                out.write(chunk)
+                left -= len(chunk)
+        with partial.open("rb") as f:
+            if f.read(5) != b"%PDF-":
+                return 400, {"error": "not a PDF file"}
+        if target.exists():
+            return 409, {"error": f"library/{name} already exists"}
+        partial.replace(target)
+    finally:
+        partial.unlink(missing_ok=True)
+    print(f"added library/{name}: run /ingest in Claude Code", file=sys.__stdout__, flush=True)
+    return 200, {"saved": f"library/{name}"}
 
 
 def events(request: BaseHTTPRequestHandler, watcher: Watcher) -> None:

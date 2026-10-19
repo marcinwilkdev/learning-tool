@@ -78,6 +78,16 @@ header .spacer { flex: 1; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
 
+/* upload */
+.drop { border-style: dashed; margin-bottom: 12px; text-align: center; transition: background .2s, border-color .2s; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.linkbtn { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.uploads { list-style: none; margin: 0; padding: 0; font-size: 13px; text-align: left; }
+.uploads:not(:empty) { margin-top: 10px; }
+.uploads li { padding: 3px 0; border-top: 1px solid var(--border); word-break: break-word; }
+.uploads .ok { color: var(--good); }
+.uploads .bad { color: var(--bad); }
+
 /* curriculum */
 .module { display: grid; grid-template-columns: 200px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
 .module:first-child { border-top: 0; padding-top: 0; }
@@ -130,6 +140,13 @@ header .spacer { flex: 1; }
   <h2>Overview</h2>
   <div class="tiles" id="tiles"></div>
   <h2>Documents</h2>
+  <div class="card drop" id="drop">
+    <input type="file" id="pick" accept=".pdf,application/pdf" multiple hidden>
+    <div><strong>Add PDFs to <code>library/</code></strong>: drop them here or
+      <button type="button" class="linkbtn" id="pick-btn">choose files</button>.
+      <span class="muted">Then run <code>/ingest</code> in Claude Code.</span></div>
+    <ul class="uploads" id="uploads"></ul>
+  </div>
   <div id="docs"></div>
   <h2>Curriculum</h2>
   <div class="card">
@@ -218,7 +235,7 @@ function renderDocs(d) {
     const p = doc.plan;
     const reading = step && step.phase === "read" && !step.skipped && step.doc === doc.slug ? step.part : null;
     const badges = [
-      doc.unconverted ? `<span class="badge now">not converted: run learnkb-ingest</span>` : `<span class="badge yes">converted</span>`,
+      doc.unconverted ? `<span class="badge now">not converted: run /ingest</span>` : `<span class="badge yes">converted</span>`,
       p ? `<span class="badge ${p.outline ? "yes" : ""}">outline</span>` : "",
       doc.transcription ? `<span class="badge ${doc.transcription === "pending" ? "now" : "yes"}" title="${doc.scanned_pages} scanned page(s)">${
         {pending: "scanned: transcription pending", transcribed: "scanned: transcribed", ocr: "scanned: OCR kept"}[doc.transcription] || doc.transcription}</span>` : "",
@@ -295,7 +312,8 @@ function render(d) {
   renderNow(d);
   if (!d.kb) {
     $("tiles").innerHTML = ""; $("curriculum").innerHTML = ""; $("feed").innerHTML = "";
-    $("docs").innerHTML = `<div class="card empty">No <code>kb/</code> on this branch. Switch to a learning branch, or add PDFs and run <code>/ingest</code>.</div>`;
+    if (d.documents?.length) renderDocs(d);
+    else $("docs").innerHTML = `<div class="card empty">No <code>kb/</code> on this branch. Switch to a learning branch, or add PDFs and run <code>/ingest</code>.</div>`;
     return;
   }
   if (d.failure) return;  // keep the last good view
@@ -308,6 +326,37 @@ $("tabs").addEventListener("click", (e) => {
   tab = e.target.dataset.tab;
   if (state?.health) renderHealth(state);
 });
+
+async function upload(files) {
+  const have = new Set((state?.documents || []).filter((x) => !x.removed).map((x) => x.file.normalize("NFC")));
+  for (const f of files) {
+    const li = document.createElement("li");
+    li.innerHTML = `<code>${esc(f.name)}</code> <span class="muted">uploading…</span>`;
+    $("uploads").append(li);
+    const status = li.lastElementChild;
+    const done = (cls, msg) => { status.className = cls; status.textContent = msg; };
+    if (!/\.pdf$/i.test(f.name)) { done("bad", "not a PDF, skipped"); continue; }
+    if (have.has(f.name.normalize("NFC"))) { done("bad", "already in library/, skipped"); continue; }
+    try {
+      const r = await fetch(`api/upload?name=${encodeURIComponent(f.name)}`,
+                            { method: "POST", headers: { "Content-Type": "application/pdf" }, body: f });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) done("ok", `added as ${j.saved}`);
+      else done("bad", j.error || `failed (HTTP ${r.status})`);
+    } catch {
+      done("bad", "upload failed: is learnkb-serve still running?");
+    }
+  }
+}
+
+const drop = $("drop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+drop.addEventListener("dragleave", (e) => { if (!drop.contains(e.relatedTarget)) drop.classList.remove("over"); });
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); upload([...e.dataTransfer.files]); });
+// A PDF dropped just outside the zone would otherwise replace the panel with the PDF.
+["dragover", "drop"].forEach((t) => window.addEventListener(t, (e) => e.preventDefault()));
+$("pick-btn").addEventListener("click", () => $("pick").click());
+$("pick").addEventListener("change", (e) => { upload([...e.target.files]); e.target.value = ""; });
 
 function setConn(cls, text) { $("conn").className = `chip ${cls}`; $("conn").lastElementChild.textContent = text; }
 function connect() {

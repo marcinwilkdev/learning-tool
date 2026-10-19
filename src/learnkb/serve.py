@@ -5,7 +5,8 @@
 - `/` is the learning site from site/. It's rebuilt at start and again whenever kb/
   changes, so lessons and quizzes appear as they're written. A build that fails (a
   half-written page mid-ingest, say) keeps the last good site.
-- `/admin/` is the admin panel (see admin.py): build progress, coverage and health, live.
+- `/admin/` is the admin panel (see admin.py): build progress, coverage and health, live,
+  and a drop zone that adds PDFs to library/.
 - `/api/results` takes a quiz page's results and saves them as
   learner/inbox/<topic>--<attempt>.txt, the same text as the "Copy results for Claude"
   export, so `/assess` with no arguments can review them without any pasting. Changing
@@ -117,6 +118,8 @@ def handler(watcher: admin.Watcher):
             self.wfile.write(body)
 
         def do_POST(self):
+            if self.path.startswith("/admin/"):
+                return admin.handle_post(self, self.path[len("/admin/"):])
             if self.path != "/api/results":
                 return self.reply(404, {"error": "not found"})
             length = int(self.headers.get("Content-Length") or 0)

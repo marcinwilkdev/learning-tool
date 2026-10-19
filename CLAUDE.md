@@ -25,7 +25,7 @@ Rules:
 ```bash
 git switch main
 git switch -c learn/<subject>
-# copy the PDFs into library/
+# copy the PDFs into library/ (or drop them on the admin panel, http://localhost:8000/admin/)
 ```
 To watch the build live, run `uv run learnkb-serve --open --admin` in another terminal first: the
 admin panel shows the progress, and the site at http://localhost:8000 fills in as pages are written.
