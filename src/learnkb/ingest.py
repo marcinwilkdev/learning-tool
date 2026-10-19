@@ -242,8 +242,9 @@ def write_outline(raw: Path) -> Path:
             f"prose. Lines: {fmt(loss['lost_text'])}",
             f"- **Flattened code** ({len(loss['flattened'])}): several commands, or a command and its "
             f"output, joined onto one line; split them at `$ ` when quoting. Lines: {fmt(loss['flattened'])}",
-            f"- **Figures** ({len(loss['figures'])}): only the caption survives. Describe a figure "
-            "from its caption and the surrounding text, never from memory.",
+            f"- **Figures** ({len(loss['figures'])}): only a caption or a transcriber's `<!-- figure: -->` "
+            "description survives. Describe a figure from that and the surrounding text, never from memory. "
+            f"Lines: {fmt(loss['figures'])}",
             "", "## Headings", "", "| Line | Size | Heading |", "|---|---|---|"]
     for h, nxt in zip(heads, heads[1:] + [len(lines)]):
         out.append(f"| {h + 1} | {kb(h, nxt)} | {title(h).replace('|', '/')} |")
