@@ -39,6 +39,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from learnkb import activity
 from learnkb.check import CURRICULUM, SECTIONS, Report, as_list, check, load_pages, read_json
+from learnkb.i18n import SITE_CONFIG
 from learnkb.ingest import KB, LIBRARY, MANIFEST, RAW, ROOT, library_key, load_manifest, reading_parts
 from learnkb.site import load_extras
 
@@ -60,6 +61,14 @@ def iso(ts: float) -> str:
 def norm(section) -> str:
     # Same normalisation as check_sections: entities and spacing don't matter.
     return " ".join(html.unescape(str(section)).split()).casefold()
+
+
+def site_lang() -> str | None:
+    """The language kb/site.json gives the site, which the panel uses too unless the viewer picks one."""
+    try:
+        return json.loads(SITE_CONFIG.read_text(encoding="utf-8")).get("lang")
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def git_branch() -> str | None:
@@ -159,7 +168,7 @@ def recent_files(limit: int = RECENT_FILES) -> tuple[list[dict], dict]:
 
 def snapshot() -> dict:
     steps = activity.recent()
-    snap = {"generated_at": iso(time.time()), "branch": git_branch(), "kb": KB.exists(),
+    snap = {"generated_at": iso(time.time()), "branch": git_branch(), "kb": KB.exists(), "lang": site_lang(),
             "steps": steps[-60:], "phases": activity.PHASES}
     if not KB.exists():
         snap["documents"] = documents({}, steps)  # PDFs added before the first /ingest
@@ -287,25 +296,30 @@ def handle_post(request: BaseHTTPRequestHandler, path: str) -> None:
     reply(request, *upload(request, (parse_qs(url.query).get("name") or [""])[0]))
 
 
+def refuse(status: int, code: str, error: str, **extra) -> tuple[int, dict]:
+    # `code` lets the panel show the error in its own language.
+    return status, {"error": error, "code": code, **extra}
+
+
 def upload(request: BaseHTTPRequestHandler, name: str) -> tuple[int, dict]:
     """Save the request body as library/<name>, a new PDF."""
     # Another site's page can't post here: application/pdf needs a CORS preflight, which
     # this server never grants, and the Host check stops DNS rebinding.
     if request.headers.get("Host", "").rsplit(":", 1)[0] not in ("localhost", "127.0.0.1"):
-        return 403, {"error": "uploads are only accepted from localhost"}
+        return refuse(403, "host", "uploads are only accepted from localhost")
     if request.headers.get("Content-Type") != "application/pdf":
-        return 415, {"error": "expected Content-Type: application/pdf"}
+        return refuse(415, "type", "expected Content-Type: application/pdf")
     if git_branch() == "main":
-        return 409, {"error": "main holds no subject content: switch to a learn/<subject> branch first"}
+        return refuse(409, "main", "main holds no subject content: switch to a learn/<subject> branch first")
     name = unicodedata.normalize("NFC", Path(name.replace("\\", "/")).name.strip())
     if not name.lower().endswith(".pdf") or name.startswith(".") or any(ord(c) < 32 for c in name):
-        return 400, {"error": "expected a .pdf file name"}
+        return refuse(400, "name", "expected a .pdf file name")
     length = int(request.headers.get("Content-Length") or 0)
     if not 0 < length <= MAX_UPLOAD:
-        return 413, {"error": f"empty or larger than {MAX_UPLOAD // 2**20} MB"}
+        return refuse(413, "size", f"empty or larger than {MAX_UPLOAD // 2**20} MB", max_mb=MAX_UPLOAD // 2**20)
     target = LIBRARY / name
     if target.exists():
-        return 409, {"error": f"library/{name} already exists"}
+        return refuse(409, "exists", f"library/{name} already exists")
 
     LIBRARY.mkdir(exist_ok=True)
     partial = LIBRARY / f".{name}.part"  # hidden and not *.pdf: the panel ignores it until it's complete
@@ -315,14 +329,14 @@ def upload(request: BaseHTTPRequestHandler, name: str) -> tuple[int, dict]:
             while left:
                 chunk = request.rfile.read(min(CHUNK, left))
                 if not chunk:
-                    return 400, {"error": "upload cut short"}
+                    return refuse(400, "short", "upload cut short")
                 out.write(chunk)
                 left -= len(chunk)
         with partial.open("rb") as f:
             if f.read(5) != b"%PDF-":
-                return 400, {"error": "not a PDF file"}
+                return refuse(400, "notpdf", "not a PDF file")
         if target.exists():
-            return 409, {"error": f"library/{name} already exists"}
+            return refuse(409, "exists", f"library/{name} already exists")
         partial.replace(target)
     finally:
         partial.unlink(missing_ok=True)

@@ -39,6 +39,8 @@ header .spacer { flex: 1; }
 @keyframes pulse { 50% { opacity: .35; } }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 
+button.chip { font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
+
 /* current step */
 .now { margin-top: 20px; }
 .stepper { display: flex; gap: 4px; margin: 12px 0 10px; flex-wrap: wrap; }
@@ -129,42 +131,41 @@ header .spacer { flex: 1; }
 <body>
 <main>
   <header>
-    <h1>Knowledge base admin</h1>
+    <h1 data-i18n="title">Knowledge base admin</h1>
     <span class="chip" id="branch" hidden></span>
     <span class="spacer"></span>
-    <a class="chip" href="../" target="learnkb-site">Learning site ↗</a>
+    <button type="button" class="chip" id="lang"></button>
+    <a class="chip" href="../" target="learnkb-site" data-i18n="site_link">Learning site ↗</a>
     <span class="chip" id="conn"><span class="dot"></span><span>connecting…</span></span>
   </header>
   <div id="failure" class="card failure" hidden></div>
   <section class="card now" id="now"></section>
-  <h2>Overview</h2>
+  <h2 data-i18n="h_overview">Overview</h2>
   <div class="tiles" id="tiles"></div>
-  <h2>Documents</h2>
+  <h2 data-i18n="h_documents">Documents</h2>
   <div class="card drop" id="drop">
     <input type="file" id="pick" accept=".pdf,application/pdf" multiple hidden>
-    <div><strong>Add PDFs to <code>library/</code></strong>: drop them here or
-      <button type="button" class="linkbtn" id="pick-btn">choose files</button>.
-      <span class="muted">Then run <code>/ingest</code> in Claude Code.</span></div>
+    <div data-i18n="drop"></div>
     <ul class="uploads" id="uploads"></ul>
   </div>
   <div id="docs"></div>
-  <h2>Curriculum</h2>
+  <h2 data-i18n="h_curriculum">Curriculum</h2>
   <div class="card">
     <div class="legend" style="margin-bottom:12px">
-      <span><i style="background:var(--note-soft)"></i>topic page</span>
-      <span><i style="background:var(--good-soft)"></i>+ lesson</span>
-      <span><i style="background:var(--good)"></i>+ quiz</span>
-      <span><i style="border:1px dashed var(--bad)"></i>listed, no page yet</span>
+      <span><i style="background:var(--note-soft)"></i><span data-i18n="leg_page">topic page</span></span>
+      <span><i style="background:var(--good-soft)"></i><span data-i18n="leg_lesson">+ lesson</span></span>
+      <span><i style="background:var(--good)"></i><span data-i18n="leg_quiz">+ quiz</span></span>
+      <span><i style="border:1px dashed var(--bad)"></i><span data-i18n="leg_missing">listed, no page yet</span></span>
     </div>
     <div id="curriculum"></div>
   </div>
   <div class="cols">
-    <div><h2>Activity</h2><div class="card"><ul class="feed" id="feed"></ul></div></div>
-    <div><h2>Health <span class="muted" id="health-sum"></span></h2>
+    <div><h2 data-i18n="h_activity">Activity</h2><div class="card"><ul class="feed" id="feed"></ul></div></div>
+    <div><h2><span data-i18n="h_health">Health</span> <span class="muted" id="health-sum"></span></h2>
       <div class="card">
         <div class="tabs" id="tabs">
-          <button data-tab="errors" aria-pressed="true">Errors</button>
-          <button data-tab="warnings" aria-pressed="false">Warnings</button>
+          <button data-tab="errors" aria-pressed="true" data-i18n="tab_errors">Errors</button>
+          <button data-tab="warnings" aria-pressed="false" data-i18n="tab_warnings">Warnings</button>
         </div>
         <ul class="issues" id="issues"></ul>
       </div>
@@ -175,16 +176,118 @@ header .spacer { flex: 1; }
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const STALE_MIN = 30;  // a step older than this isn't "now" any more
-let state = null, prev = null, tab = "errors";
+let state = null, prev = null, tab = "errors", conn = ["", "connecting"];
+
+// Interface strings. A function takes the values it shows; a key missing from a language falls back to English.
+const STR = {
+  en: {
+    title: "Knowledge base admin", site_link: "Learning site ↗", switch_to: "Przełącz na polski",
+    h_overview: "Overview", h_documents: "Documents", h_curriculum: "Curriculum", h_activity: "Activity", h_health: "Health",
+    tab_errors: "Errors", tab_warnings: "Warnings",
+    connecting: "connecting…", live: "live", updated: (t) => `live · updated ${t}`, offline: "disconnected, retrying…",
+    started: (a) => `started ${a}`, part_of: (n, total) => `part ${n}${total ? ` of ${total}` : ""}`, idle: "Idle",
+    last_step: (m, a) => `last step “${m}” ${a}`,
+    no_steps: "no build steps recorded yet. Run <code>/ingest</code> and progress appears here.",
+    written: (a, b) => `${a} file(s) written in the last 10 min, ${b} in the last hour`,
+    docs_built: "Documents built", converted_n: (n) => `${n} converted`, concepts: "Concepts", wiki_pages: "pages in the wiki",
+    topics: "Topics", placed: (p, m) => `${p} placed in ${m} modules`, lessons: "Lessons", with_lesson: "topics with a lesson",
+    quizzes: "Quizzes", with_quiz: "topics with a quiz", errors: "Errors", n_warnings: (n) => `${n} warning(s)`,
+    drop: `<strong>Add PDFs to <code>library/</code></strong>: drop them here or
+      <button type="button" class="linkbtn" id="pick-btn">choose files</button>.
+      <span class="muted">Then run <code>/ingest</code> in Claude Code.</span>`,
+    no_pdfs: "No PDFs in <code>library/</code> yet.",
+    no_kb: "No <code>kb/</code> on this branch. Switch to a learning branch, or add PDFs and run <code>/ingest</code>.",
+    b_unconverted: "not converted: run /ingest", b_converted: "converted", b_outline: "outline",
+    scanned: (n) => `${n} scanned page(s)`, tr_pending: "scanned: transcription pending", tr_transcribed: "scanned: transcribed",
+    tr_ocr: "scanned: OCR kept", b_source: "source page", b_wiki_built: "wiki built", b_wiki_pending: "wiki pending",
+    b_removed: "removed from library", pages: (n) => `${n} pages`, lines: (s) => `${s} lines`, converted_ago: (a) => `converted ${a}`,
+    part_title: (n, a, b, s) => `Part ${n}: lines ${a}–${b}, starts at “${s}”`,
+    part_skipped: "skipped on purpose, left out of coverage", part_cited: (c, h, p) => `${c} of ${h} headings cited (${p}%)`,
+    doc_cited: (c, h, p, sk) => `${c} of ${h} headings cited by wiki pages (${p}%)${sk ? `, not counting ${sk} skipped part(s)` : ""}`,
+    leg_page: "topic page", leg_lesson: "+ lesson", leg_quiz: "+ quiz", leg_missing: "listed, no page yet",
+    leg_fill: "fill = headings cited", leg_read: "read", leg_reading: "reading now", leg_skipped: "skipped",
+    concepts_n: (n) => `${n} concept(s)`, topics_n: (n) => `${n} topic(s)`,
+    unplaced: "Not in the curriculum", unplaced_sub: "topic pages with no module yet",
+    no_curriculum: "No curriculum yet. It appears once topics are written.",
+    skipped: "(skipped)", part_n: (n) => `part ${n}`, new: "new", nothing: "Nothing yet.",
+    health_sum: (e, w) => `· ${e} error(s), ${w} warning(s)`,
+    more: (n) => `… and ${n} more (run <code>uv run learnkb-check</code>)`,
+    none_errors: "None. The wiki validates.", none_warnings: "None.",
+    failure: "Couldn't read the knowledge base (probably a file mid-write; retrying on the next change):",
+    uploading: "uploading…", not_pdf: "not a PDF, skipped", already: "already in library/, skipped",
+    added: (p) => `added as ${p}`, failed: (s) => `failed (HTTP ${s})`, net: "upload failed: is learnkb-serve still running?",
+    "err:host": "uploads are only accepted from localhost", "err:type": "expected Content-Type: application/pdf",
+    "err:main": "main holds no subject content: switch to a learn/<subject> branch first",
+    "err:name": "expected a .pdf file name", "err:size": (j) => `empty or larger than ${j.max_mb} MB`,
+    "err:exists": "already in library/", "err:short": "upload cut short", "err:notpdf": "not a PDF file",
+  },
+  pl: {
+    title: "Panel bazy wiedzy", site_link: "Strona nauki ↗", switch_to: "Switch to English",
+    h_overview: "Przegląd", h_documents: "Dokumenty", h_curriculum: "Program", h_activity: "Aktywność", h_health: "Stan",
+    tab_errors: "Błędy", tab_warnings: "Ostrzeżenia",
+    connecting: "łączenie…", live: "na żywo", updated: (t) => `na żywo · aktualizacja ${t}`, offline: "rozłączono, ponawiam…",
+    started: (a) => `rozpoczęto ${a}`, part_of: (n, total) => `część ${n}${total ? ` z ${total}` : ""}`, idle: "Bezczynny",
+    last_step: (m, a) => `ostatni krok „${m}” ${a}`,
+    no_steps: "nie zapisano jeszcze żadnych kroków budowania. Uruchom <code>/ingest</code>, a postęp pojawi się tutaj.",
+    written: (a, b) => `zapisane pliki: ${a} w ostatnich 10 min, ${b} w ostatniej godzinie`,
+    docs_built: "Zbudowane dokumenty", converted_n: (n) => `przekonwertowane: ${n}`, concepts: "Pojęcia", wiki_pages: "strony w wiki",
+    topics: "Tematy", placed: (p, m) => `${p} w programie (modułów: ${m})`, lessons: "Lekcje", with_lesson: "tematy z lekcją",
+    quizzes: "Quizy", with_quiz: "tematy z quizem", errors: "Błędy", n_warnings: (n) => `ostrzeżenia: ${n}`,
+    drop: `<strong>Dodaj PDF-y do <code>library/</code></strong>: upuść je tutaj albo
+      <button type="button" class="linkbtn" id="pick-btn">wybierz pliki</button>.
+      <span class="muted">Potem uruchom <code>/ingest</code> w Claude Code.</span>`,
+    no_pdfs: "Brak PDF-ów w <code>library/</code>.",
+    no_kb: "Na tym branchu nie ma <code>kb/</code>. Przełącz się na branch nauki albo dodaj PDF-y i uruchom <code>/ingest</code>.",
+    b_unconverted: "nieprzekonwertowany: uruchom /ingest", b_converted: "przekonwertowany", b_outline: "konspekt",
+    scanned: (n) => `zeskanowane strony: ${n}`, tr_pending: "skan: czeka na transkrypcję", tr_transcribed: "skan: przepisany",
+    tr_ocr: "skan: zostawiono OCR", b_source: "strona źródła", b_wiki_built: "wiki zbudowane", b_wiki_pending: "wiki w toku",
+    b_removed: "usunięty z biblioteki", pages: (n) => `stron: ${n}`, lines: (s) => `wierszy: ${s}`,
+    converted_ago: (a) => `przekonwertowano ${a}`,
+    part_title: (n, a, b, s) => `Część ${n}: wiersze ${a}–${b}, zaczyna się od „${s}”`,
+    part_skipped: "pominięta celowo, nie wlicza się do pokrycia",
+    part_cited: (c, h, p) => `cytowane nagłówki: ${c} z ${h} (${p}%)`,
+    doc_cited: (c, h, p, sk) => `nagłówki cytowane przez strony wiki: ${c} z ${h} (${p}%)${sk ? `, bez pominiętych części (${sk})` : ""}`,
+    leg_page: "strona tematu", leg_lesson: "+ lekcja", leg_quiz: "+ quiz", leg_missing: "w programie, bez strony",
+    leg_fill: "wypełnienie = cytowane nagłówki", leg_read: "przeczytana", leg_reading: "czytana teraz", leg_skipped: "pominięta",
+    concepts_n: (n) => `pojęcia: ${n}`, topics_n: (n) => `tematy: ${n}`,
+    unplaced: "Poza programem", unplaced_sub: "strony tematów bez modułu",
+    no_curriculum: "Programu jeszcze nie ma. Pojawi się, gdy powstaną tematy.",
+    skipped: "(pominięto)", part_n: (n) => `część ${n}`, new: "nowy", nothing: "Na razie nic.",
+    health_sum: (e, w) => `· błędy: ${e}, ostrzeżenia: ${w}`,
+    more: (n) => `… i jeszcze ${n} (uruchom <code>uv run learnkb-check</code>)`,
+    none_errors: "Brak. Wiki przechodzi walidację.", none_warnings: "Brak.",
+    failure: "Nie udało się odczytać bazy wiedzy (pewnie plik jest w trakcie zapisu; ponowię przy następnej zmianie):",
+    uploading: "wysyłanie…", not_pdf: "to nie PDF, pominięto", already: "już jest w library/, pominięto",
+    added: (p) => `dodano jako ${p}`, failed: (s) => `błąd (HTTP ${s})`, net: "wysyłanie nie powiodło się: czy learnkb-serve nadal działa?",
+    "err:host": "pliki można dodawać tylko z localhost", "err:type": "oczekiwano Content-Type: application/pdf",
+    "err:main": "main nie zawiera treści przedmiotu: najpierw przełącz się na branch learn/<przedmiot>",
+    "err:name": "oczekiwano nazwy pliku .pdf", "err:size": (j) => `pusty albo większy niż ${j.max_mb} MB`,
+    "err:exists": "już jest w library/", "err:short": "wysyłanie przerwane", "err:notpdf": "to nie jest plik PDF",
+    "phase:parse": "parsowanie", "phase:transcribe": "transkrypcja", "phase:read": "czytanie", "phase:source": "źródło",
+    "phase:concepts": "pojęcia", "phase:topics": "tematy", "phase:curriculum": "program", "phase:check": "kontrola",
+    "phase:done": "gotowe",
+  },
+};
+const LANG_KEY = "learnkb-admin-lang";
+const stored = () => { try { return localStorage.getItem(LANG_KEY); } catch { return null; } };
+// The viewer's choice, else the knowledge base's language (kb/site.json), else the browser's.
+const pickLang = (kbLang) => [stored(), kbLang, navigator.language.slice(0, 2)].find((l) => l in STR) || "en";
+let lang = pickLang(null);
+
+function t(key, ...args) {
+  const v = STR[lang][key] ?? STR.en[key] ?? (key.startsWith("phase:") ? key.slice(6) : key);
+  return typeof v === "function" ? v(...args) : v;
+}
 
 function ago(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
-  if (s < 60) return `${Math.round(s)}s ago`;
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
-  return `${Math.round(s / 86400)}d ago`;
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "always", style: "short" });
+  if (s < 60) return rtf.format(-Math.round(s), "second");
+  if (s < 3600) return rtf.format(-Math.round(s / 60), "minute");
+  if (s < 86400) return rtf.format(-Math.round(s / 3600), "hour");
+  return rtf.format(-Math.round(s / 86400), "day");
 }
-const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const clock = (iso) => new Date(iso).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
 
 function renderNow(d) {
@@ -192,20 +295,20 @@ function renderNow(d) {
   const active = step && step.phase !== "done" && (Date.now() - new Date(step.at)) / 60000 < STALE_MIN;
   const idx = active ? d.phases.indexOf(step.phase) : -1;
   const stepper = d.phases.map((p, i) =>
-    `<span class="${i < idx ? "past" : i === idx ? "current" : ""}">${esc(p)}</span>`).join("");
+    `<span class="${i < idx ? "past" : i === idx ? "current" : ""}">${esc(t(`phase:${p}`))}</span>`).join("");
   let line;
   if (active) {
     const doc = d.documents?.find((x) => x.slug === step.doc);
     const total = doc?.plan?.parts.length;
-    line = `<strong>${esc(step.message || step.phase)}</strong>
-      ${step.doc ? `<span class="chip">${esc(step.doc)}${step.part ? ` · part ${step.part}${total ? ` of ${total}` : ""}` : ""}</span>` : ""}
-      <span class="muted">started ${ago(step.at)}</span>`;
+    line = `<strong>${esc(step.message || t(`phase:${step.phase}`))}</strong>
+      ${step.doc ? `<span class="chip">${esc(step.doc)}${step.part ? ` · ${t("part_of", step.part, total)}` : ""}</span>` : ""}
+      <span class="muted">${t("started", ago(step.at))}</span>`;
   } else if (step) {
-    line = `<strong>Idle</strong> <span class="muted">last step “${esc(step.message || step.phase)}” ${ago(step.at)}</span>`;
+    line = `<strong>${t("idle")}</strong> <span class="muted">${t("last_step", esc(step.message || t(`phase:${step.phase}`)), ago(step.at))}</span>`;
   } else {
-    line = `<strong>Idle</strong> <span class="muted">no build steps recorded yet. Run <code>/ingest</code> and progress appears here.</span>`;
+    line = `<strong>${t("idle")}</strong> <span class="muted">${t("no_steps")}</span>`;
   }
-  const w = d.written ? `<span class="muted">${d.written["10m"]} file(s) written in the last 10 min, ${d.written["60m"]} in the last hour</span>` : "";
+  const w = d.written ? `<span class="muted">${t("written", d.written["10m"], d.written["60m"])}</span>` : "";
   $("now").innerHTML = `<div class="now-line">${line}</div><div class="stepper">${stepper}</div>${w}`;
 }
 
@@ -218,46 +321,45 @@ function renderTiles(d) {
   const c = d.counts, docs = (d.documents || []).filter((x) => !x.removed), h = d.health;
   const built = docs.filter((x) => x.wiki_built).length;
   $("tiles").innerHTML = [
-    tile("Documents built", `${built}/${docs.length}`, `${docs.filter((x) => x.plan).length} converted`, pct(built, docs.length)),
-    tile("Concepts", c.concepts, "pages in the wiki"),
-    tile("Topics", c.topics, `${c.placed} placed in ${c.modules} modules`, pct(c.placed, c.topics)),
-    tile("Lessons", `${c.lessons}/${c.topics}`, "topics with a lesson", pct(c.lessons, c.topics)),
-    tile("Quizzes", `${c.quizzes}/${c.topics}`, "topics with a quiz", pct(c.quizzes, c.topics)),
-    tile("Errors", h.n_errors, `${h.n_warnings} warning(s)`, null, h.n_errors ? "bad" : "ok"),
+    tile(t("docs_built"), `${built}/${docs.length}`, t("converted_n", docs.filter((x) => x.plan).length), pct(built, docs.length)),
+    tile(t("concepts"), c.concepts, t("wiki_pages")),
+    tile(t("topics"), c.topics, t("placed", c.placed, c.modules), pct(c.placed, c.topics)),
+    tile(t("lessons"), `${c.lessons}/${c.topics}`, t("with_lesson"), pct(c.lessons, c.topics)),
+    tile(t("quizzes"), `${c.quizzes}/${c.topics}`, t("with_quiz"), pct(c.quizzes, c.topics)),
+    tile(t("errors"), h.n_errors, t("n_warnings", h.n_warnings), null, h.n_errors ? "bad" : "ok"),
   ].join("");
 }
 
 function renderDocs(d) {
   const step = d.steps?.at(-1);
   const docs = d.documents || [];
-  if (!docs.length) { $("docs").innerHTML = `<div class="card empty">No PDFs in <code>library/</code> yet.</div>`; return; }
+  if (!docs.length) { $("docs").innerHTML = `<div class="card empty">${t("no_pdfs")}</div>`; return; }
   $("docs").innerHTML = docs.map((doc) => {
     const p = doc.plan;
     const reading = step && step.phase === "read" && !step.skipped && step.doc === doc.slug ? step.part : null;
     const badges = [
-      doc.unconverted ? `<span class="badge now">not converted: run /ingest</span>` : `<span class="badge yes">converted</span>`,
-      p ? `<span class="badge ${p.outline ? "yes" : ""}">outline</span>` : "",
-      doc.transcription ? `<span class="badge ${doc.transcription === "pending" ? "now" : "yes"}" title="${doc.scanned_pages} scanned page(s)">${
-        {pending: "scanned: transcription pending", transcribed: "scanned: transcribed", ocr: "scanned: OCR kept"}[doc.transcription] || doc.transcription}</span>` : "",
-      doc.slug ? `<span class="badge ${doc.source_page ? "yes" : ""}">source page</span>` : "",
-      doc.slug ? `<span class="badge ${doc.wiki_built ? "yes" : "now"}">${doc.wiki_built ? "wiki built" : "wiki pending"}</span>` : "",
-      doc.removed ? `<span class="badge">removed from library</span>` : "",
+      doc.unconverted ? `<span class="badge now">${t("b_unconverted")}</span>` : `<span class="badge yes">${t("b_converted")}</span>`,
+      p ? `<span class="badge ${p.outline ? "yes" : ""}">${t("b_outline")}</span>` : "",
+      doc.transcription ? `<span class="badge ${doc.transcription === "pending" ? "now" : "yes"}" title="${esc(t("scanned", doc.scanned_pages))}">${
+        {pending: t("tr_pending"), transcribed: t("tr_transcribed"), ocr: t("tr_ocr")}[doc.transcription] || esc(doc.transcription)}</span>` : "",
+      doc.slug ? `<span class="badge ${doc.source_page ? "yes" : ""}">${t("b_source")}</span>` : "",
+      doc.slug ? `<span class="badge ${doc.wiki_built ? "yes" : "now"}">${doc.wiki_built ? t("b_wiki_built") : t("b_wiki_pending")}</span>` : "",
+      doc.removed ? `<span class="badge">${t("b_removed")}</span>` : "",
     ].join(" ");
-    const meta = [doc.pages && `${doc.pages} pages`, p && `${p.lines.toLocaleString()} lines`, p && `${p.kb} KB`,
-                  doc.converted_at && `converted ${ago(doc.converted_at)}`].filter(Boolean).join(" · ");
+    const meta = [doc.pages && t("pages", doc.pages), p && t("lines", p.lines.toLocaleString(lang)), p && `${p.kb} KB`,
+                  doc.converted_at && t("converted_ago", ago(doc.converted_at))].filter(Boolean).join(" · ");
     const parts = p ? `<div class="parts">${p.parts.map((x) => {
         const cov = pct(x.cited, x.headings);
         const cls = x.n === reading ? "reading" : x.status || "";
-        const note = x.status === "skipped" ? "skipped on purpose, left out of coverage"
-                                            : `${x.cited} of ${x.headings} headings cited (${cov}%)`;
-        return `<div class="part ${cls}" title="Part ${x.n}: lines ${x.lines[0]}–${x.lines[1]}, starts at “${esc(x.starts)}”\n${note}">
+        const note = x.status === "skipped" ? t("part_skipped") : t("part_cited", x.cited, x.headings, cov);
+        return `<div class="part ${cls}" title="${esc(t("part_title", x.n, x.lines[0], x.lines[1], x.starts))}\n${note}">
           <div class="fill" style="height:${cov}%"></div><span>${x.n}</span></div>`;
       }).join("")}</div>
-      <div class="legend"><span>${p.cited} of ${p.headings} headings cited by wiki pages (${pct(p.cited, p.headings)}%)${p.skipped ? `, not counting ${p.skipped} skipped part(s)` : ""}</span>
-        <span><i style="background:var(--accent);opacity:.55"></i>fill = headings cited</span>
-        <span><i style="border:2px solid var(--good)"></i>read</span>
-        <span><i style="border:2px solid var(--accent)"></i>reading now</span>
-        <span><i style="border:2px dashed var(--muted)"></i>skipped</span></div>` : "";
+      <div class="legend"><span>${t("doc_cited", p.cited, p.headings, pct(p.cited, p.headings), p.skipped)}</span>
+        <span><i style="background:var(--accent);opacity:.55"></i>${t("leg_fill")}</span>
+        <span><i style="border:2px solid var(--good)"></i>${t("leg_read")}</span>
+        <span><i style="border:2px solid var(--accent)"></i>${t("leg_reading")}</span>
+        <span><i style="border:2px dashed var(--muted)"></i>${t("leg_skipped")}</span></div>` : "";
     return `<div class="card doc"><div class="doc-head"><strong>${esc(doc.title)}</strong>
       <code class="muted">${esc(doc.file)}</code>${badges}</div>
       <div class="muted" style="font-size:13px">${meta}</div>${parts}</div>`;
@@ -267,59 +369,76 @@ function renderDocs(d) {
 function renderCurriculum(d) {
   const before = new Map();
   prev?.curriculum?.modules.flatMap((m) => m.topics).concat(prev.curriculum.unplaced)
-    .forEach((t) => before.set(t.slug, `${t.page}${t.lesson}${t.quiz}`));
-  const chip = (t) => {
-    const cls = !t.page ? "missing" : t.quiz ? "quiz" : t.lesson ? "lesson" : "page";
-    const changed = prev && before.get(t.slug) !== `${t.page}${t.lesson}${t.quiz}`;
-    return `<span class="topic ${cls}${changed ? " flash" : ""}" title="${esc(t.slug)} · ${t.concepts} concept(s)">${esc(t.title)}</span>`;
+    .forEach((x) => before.set(x.slug, `${x.page}${x.lesson}${x.quiz}`));
+  const chip = (x) => {
+    const cls = !x.page ? "missing" : x.quiz ? "quiz" : x.lesson ? "lesson" : "page";
+    const changed = prev && before.get(x.slug) !== `${x.page}${x.lesson}${x.quiz}`;
+    return `<span class="topic ${cls}${changed ? " flash" : ""}" title="${esc(x.slug)} · ${t("concepts_n", x.concepts)}">${esc(x.title)}</span>`;
   };
   const cur = d.curriculum;
   const rows = cur.modules.map((m) => `<div class="module"><div><div class="title">${esc(m.title)}</div>
-      <div class="muted" style="font-size:12px">${m.topics.length} topic(s)</div></div>
+      <div class="muted" style="font-size:12px">${t("topics_n", m.topics.length)}</div></div>
       <div class="topics">${m.topics.map(chip).join("")}</div></div>`);
-  if (cur.unplaced.length) rows.push(`<div class="module"><div><div class="title">Not in the curriculum</div>
-      <div class="muted" style="font-size:12px">topic pages with no module yet</div></div>
+  if (cur.unplaced.length) rows.push(`<div class="module"><div><div class="title">${t("unplaced")}</div>
+      <div class="muted" style="font-size:12px">${t("unplaced_sub")}</div></div>
       <div class="topics">${cur.unplaced.map(chip).join("")}</div></div>`);
-  $("curriculum").innerHTML = rows.join("") || `<div class="empty">No curriculum yet. It appears once topics are written.</div>`;
+  $("curriculum").innerHTML = rows.join("") || `<div class="empty">${t("no_curriculum")}</div>`;
 }
 
 function renderFeed(d) {
   const seen = new Set((prev?.files || []).map((f) => f.path + f.at));
   const items = [
-    ...(d.steps || []).map((s) => ({ at: s.at, html: `<span class="phase">${esc(s.phase)}</span>${esc(s.message || "")}${s.skipped ? ` <span class="muted">(skipped)</span>` : ""}${s.doc ? ` <span class="muted">${esc(s.doc)}${s.part ? ` · part ${s.part}` : ""}</span>` : ""}` })),
+    ...(d.steps || []).map((s) => ({ at: s.at, html: `<span class="phase">${esc(t(`phase:${s.phase}`))}</span>${esc(s.message || "")}${s.skipped ? ` <span class="muted">${t("skipped")}</span>` : ""}${s.doc ? ` <span class="muted">${esc(s.doc)}${s.part ? ` · ${t("part_n", s.part)}` : ""}</span>` : ""}` })),
     ...(d.files || []).map((f) => ({ at: f.at, fresh: prev && !seen.has(f.path + f.at),
-      html: `${f.created ? `<span class="new">new</span>` : ""}<code>${esc(f.path)}</code>` })),
+      html: `${f.created ? `<span class="new">${t("new")}</span>` : ""}<code>${esc(f.path)}</code>` })),
   ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 80);
   $("feed").innerHTML = items.map((i) => `<li class="${i.fresh ? "fresh" : ""}"><time title="${esc(i.at)}">${clock(i.at)}</time><div>${i.html}</div></li>`).join("")
-    || `<li class="empty">Nothing yet.</li>`;
+    || `<li class="empty">${t("nothing")}</li>`;
 }
 
 function renderHealth(d) {
   const h = d.health;
-  $("health-sum").textContent = `· ${h.n_errors} error(s), ${h.n_warnings} warning(s)`;
+  $("health-sum").textContent = t("health_sum", h.n_errors, h.n_warnings);
   document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.tab === tab));
   const list = h[tab], total = tab === "errors" ? h.n_errors : h.n_warnings;
   $("issues").innerHTML = list.map((m) => `<li class="${tab === "errors" ? "error" : ""}">${esc(m)}</li>`).join("")
-    + (total > list.length ? `<li class="muted">… and ${total - list.length} more (run <code>uv run learnkb-check</code>)</li>` : "")
-    || `<li class="empty" style="border:0">None. ${tab === "errors" ? "The wiki validates." : ""}</li>`;
+    + (total > list.length ? `<li class="muted">${t("more", total - list.length)}</li>` : "")
+    || `<li class="empty" style="border:0">${tab === "errors" ? t("none_errors") : t("none_warnings")}</li>`;
 }
 
 function render(d) {
   $("branch").hidden = !d.branch;
   $("branch").textContent = d.branch ? `⎇ ${d.branch}` : "";
   $("failure").hidden = !d.failure;
-  if (d.failure) $("failure").textContent = `Couldn't read the knowledge base (probably a file mid-write; retrying on the next change):\n${d.failure}`;
+  if (d.failure) $("failure").textContent = `${t("failure")}\n${d.failure}`;
   renderNow(d);
   if (!d.kb) {
     $("tiles").innerHTML = ""; $("curriculum").innerHTML = ""; $("feed").innerHTML = "";
     if (d.documents?.length) renderDocs(d);
-    else $("docs").innerHTML = `<div class="card empty">No <code>kb/</code> on this branch. Switch to a learning branch, or add PDFs and run <code>/ingest</code>.</div>`;
+    else $("docs").innerHTML = `<div class="card empty">${t("no_kb")}</div>`;
     return;
   }
   if (d.failure) return;  // keep the last good view
   renderTiles(d); renderDocs(d); renderCurriculum(d); renderFeed(d); renderHealth(d);
   prev = d;
 }
+
+function applyLang(next) {
+  lang = next;
+  document.documentElement.lang = lang;
+  document.title = t("title");
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.innerHTML = t(el.dataset.i18n); });
+  $("lang").textContent = lang === "pl" ? "EN" : "PL";
+  $("lang").title = t("switch_to");
+  setConn(...conn);
+  if (state) render(state);
+}
+
+$("lang").addEventListener("click", () => {
+  const next = lang === "pl" ? "en" : "pl";
+  try { localStorage.setItem(LANG_KEY, next); } catch {}
+  applyLang(next);
+});
 
 $("tabs").addEventListener("click", (e) => {
   if (!e.target.dataset.tab) return;
@@ -331,40 +450,51 @@ async function upload(files) {
   const have = new Set((state?.documents || []).filter((x) => !x.removed).map((x) => x.file.normalize("NFC")));
   for (const f of files) {
     const li = document.createElement("li");
-    li.innerHTML = `<code>${esc(f.name)}</code> <span class="muted">uploading…</span>`;
+    li.innerHTML = `<code>${esc(f.name)}</code> <span class="muted">${t("uploading")}</span>`;
     $("uploads").append(li);
     const status = li.lastElementChild;
     const done = (cls, msg) => { status.className = cls; status.textContent = msg; };
-    if (!/\.pdf$/i.test(f.name)) { done("bad", "not a PDF, skipped"); continue; }
-    if (have.has(f.name.normalize("NFC"))) { done("bad", "already in library/, skipped"); continue; }
+    if (!/\.pdf$/i.test(f.name)) { done("bad", t("not_pdf")); continue; }
+    if (have.has(f.name.normalize("NFC"))) { done("bad", t("already")); continue; }
     try {
       const r = await fetch(`api/upload?name=${encodeURIComponent(f.name)}`,
                             { method: "POST", headers: { "Content-Type": "application/pdf" }, body: f });
       const j = await r.json().catch(() => ({}));
-      if (r.ok) done("ok", `added as ${j.saved}`);
-      else done("bad", j.error || `failed (HTTP ${r.status})`);
+      if (r.ok) done("ok", t("added", j.saved));
+      else done("bad", `err:${j.code}` in STR.en ? t(`err:${j.code}`, j) : j.error || t("failed", r.status));
     } catch {
-      done("bad", "upload failed: is learnkb-serve still running?");
+      done("bad", t("net"));
     }
   }
 }
 
 const drop = $("drop");
-["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 drop.addEventListener("dragleave", (e) => { if (!drop.contains(e.relatedTarget)) drop.classList.remove("over"); });
 drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); upload([...e.dataTransfer.files]); });
 // A PDF dropped just outside the zone would otherwise replace the panel with the PDF.
-["dragover", "drop"].forEach((t) => window.addEventListener(t, (e) => e.preventDefault()));
-$("pick-btn").addEventListener("click", () => $("pick").click());
+["dragover", "drop"].forEach((ev) => window.addEventListener(ev, (e) => e.preventDefault()));
+// The button is re-created when the language changes, so listen on the zone.
+drop.addEventListener("click", (e) => { if (e.target.id === "pick-btn") $("pick").click(); });
 $("pick").addEventListener("change", (e) => { upload([...e.target.files]); e.target.value = ""; });
 
-function setConn(cls, text) { $("conn").className = `chip ${cls}`; $("conn").lastElementChild.textContent = text; }
+function setConn(cls, key, ...args) {
+  conn = [cls, key, ...args];
+  $("conn").className = `chip ${cls}`;
+  $("conn").lastElementChild.textContent = t(key, ...args);
+}
 function connect() {
   const es = new EventSource("api/events")  // relative: the panel lives under /admin/;
   es.onopen = () => setConn("live", "live");
-  es.onmessage = (e) => { state = JSON.parse(e.data); render(state); setConn("live", `live · updated ${clock(state.generated_at)}`); };
-  es.onerror = () => setConn("offline", "disconnected, retrying…");  // EventSource reconnects by itself
+  es.onmessage = (e) => {
+    state = JSON.parse(e.data);
+    const want = pickLang(state.lang);
+    if (want !== lang) applyLang(want); else render(state);
+    setConn("live", "updated", clock(state.generated_at));
+  };
+  es.onerror = () => setConn("offline", "offline");  // EventSource reconnects by itself
 }
+applyLang(lang);
 connect();
 setInterval(() => state && renderNow(state), 5000);  // keep the "x ago" labels fresh
 </script>
