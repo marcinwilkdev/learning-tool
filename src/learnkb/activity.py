@@ -12,7 +12,7 @@ from pathlib import Path
 
 ACTIVITY = Path(__file__).resolve().parents[2] / ".learnkb" / "activity.jsonl"
 # The ingest procedure in order; the panel draws them as a stepper.
-PHASES = ["parse", "read", "source", "concepts", "topics", "curriculum", "check", "done"]
+PHASES = ["parse", "transcribe", "read", "source", "concepts", "topics", "curriculum", "check", "done"]
 
 
 def record(phase: str, message: str = "", doc: str | None = None, part: int | None = None,

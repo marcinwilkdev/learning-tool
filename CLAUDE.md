@@ -42,6 +42,7 @@ and `learner/` on the branch.
 | Command | Does |
 |---|---|
 | `uv run learnkb-ingest` | parse new PDFs in `library/` into `kb/raw/` |
+| `uv run learnkb-ingest --transcribed DOC \| --ocr-ok DOC` | record the verdict on a scanned document's OCR draft (used by /ingest) |
 | `uv run learnkb-check` | validate the wiki and regenerate `kb/index.json` |
 | `uv run learnkb-site [topic…]` | render `site/` (a full build when no topics are given) |
 | `uv run learnkb-learner [record FILE \| rebuild \| status [topic]]` | the learner knowledge database |

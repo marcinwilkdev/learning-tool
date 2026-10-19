@@ -33,7 +33,7 @@ from pathlib import Path
 
 from learnkb import activity
 from learnkb.check import CURRICULUM, SECTIONS, Report, as_list, check, load_pages, read_json
-from learnkb.ingest import KB, LIBRARY, MANIFEST, RAW, ROOT, reading_parts
+from learnkb.ingest import KB, LIBRARY, MANIFEST, RAW, ROOT, library_key, load_manifest, reading_parts
 from learnkb.site import load_extras
 
 PAGE = Path(__file__).parent / "admin.html"
@@ -91,7 +91,7 @@ def document_plan(slug: str, cited: set[str], steps: list[dict]) -> dict | None:
 
 
 def documents(pages: dict, steps: list[dict]) -> list[dict]:
-    manifest = read_json(MANIFEST).get("documents", {})
+    manifest = load_manifest()["documents"] if KB.exists() else {}
     cited: dict[str, set[str]] = {}
     for page in pages.values():
         for src in as_list(page.meta.get("sources")):
@@ -105,9 +105,10 @@ def documents(pages: dict, steps: list[dict]) -> list[dict]:
                     "pages": d.get("pages"), "converted_at": d.get("converted_at"),
                     "wiki_built": bool(d.get("wiki_built")), "removed": bool(d.get("removed")),
                     "source_page": d["slug"] in source_docs,
+                    "scanned_pages": len(d.get("scanned_pages") or []), "transcription": d.get("transcription"),
                     "plan": document_plan(d["slug"], cited.get(d["slug"], set()), steps)})
     for pdf in sorted(LIBRARY.glob("**/*.pdf")):
-        rel = str(pdf.relative_to(LIBRARY))
+        rel = library_key(pdf)
         if rel not in manifest:
             out.append({"file": rel, "slug": None, "title": pdf.stem, "wiki_built": False,
                         "removed": False, "source_page": False, "plan": None, "unconverted": True})

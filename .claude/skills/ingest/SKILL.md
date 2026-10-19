@@ -12,9 +12,10 @@ read everything from `kb/`. Paths are relative to the project root.
 ## Layout
 
 ```
-kb/raw/<doc>.md          parsed PDFs, written by the script. Never edit.
+kb/raw/<doc>.md          parsed PDFs, written by the script. Never edit, except to
+                         transcribe scanned pages (step 1a).
 kb/raw/<doc>.outline.md  reading plan, likely conversion losses and headings with line numbers
-kb/manifest.json         documents and their wiki_built flag
+kb/manifest.json         documents, their wiki_built flag and scanned-page status
 kb/sources/<doc>.md      one page per document: what it contains and where it was used
 kb/concepts/<slug>.md    one page per concept, the core of the wiki
 kb/topics/<slug>.md      learning units: ordered, scoped, reference concepts
@@ -34,7 +35,8 @@ each step as you start it, so the panel shows where you are:
 uv run learnkb-admin step read "Part 3: Working with Remotes" --doc <doc> --part 3
 ```
 
-Phases, in order: `parse` (logged by `learnkb-ingest` itself), `read` (once per
+Phases, in order: `parse` (logged by `learnkb-ingest` itself), `transcribe` (scanned
+documents only, step 1a, with `--doc`), `read` (once per
 reading-plan part, with `--doc` and `--part`), `source`, `concepts`, `topics`,
 `curriculum`, `check`, and `done` when you've finished. The message is optional and short.
 If you deliberately leave parts of the reading plan unread (a book's index, say), log them
@@ -47,6 +49,37 @@ One call per step is enough. Don't log every file: the panel sees file writes by
 ### 1. Parse
 Run `uv run learnkb-ingest`. Documents with `"wiki_built": false` in the manifest
 are pending. If none are pending and the user didn't ask for a rebuild, stop.
+
+### 1a. Transcribe scanned pages
+A page without a text layer (a scan, a photo, handwritten notes) only gets OCR, which
+reads print well but garbles handwriting, and its confidence score doesn't notice. The
+script lists such documents as "awaiting transcription check" and gives them
+`"transcription": "pending"` and `scanned_pages` in the manifest. For each one:
+
+1. **Judge the draft.** `Read` the PDF with `pages` set to one or two scanned pages and
+   compare them with the same pages in `kb/raw/<doc>.md` (each page starts at a
+   `<!-- page N -->` marker). If the draft says what the page says, with only the odd
+   typo, keep it: `uv run learnkb-ingest --ocr-ok <doc>`, and go on to step 2.
+2. **Otherwise transcribe.** Log `uv run learnkb-admin step transcribe "Pages 1–20" --doc <doc>`
+   for each batch. `Read` the PDF at most 20 pages per call and write what each page
+   says into `kb/raw/<doc>.md`, replacing that page's OCR text between its marker and
+   the next. Keep the markers. Text pages of a mixed document stay as they are. Rules:
+   - Transcribe; don't edit. Keep the source's language, wording, abbreviations and
+     numbers, even ones that look wrong. Never fill a gap from your own knowledge.
+   - Structure it as Markdown: a heading the page shows becomes `## Heading` (in
+     normal sentence case if the page writes it in capitals), bullets become lists,
+     arrows and nesting become nested lists, tables become tables.
+   - Text in the margin or in another colour goes next to what it annotates.
+   - A drawing or picture becomes one comment describing only what is visible,
+     labels included: `<!-- figure: two columns of four cervix drawings, labelled ... -->`.
+   - Mark what you can't read `[illegible]` and an uncertain reading `[word?]`. Leave
+     out crossed-out text.
+3. **Long documents.** More than about 40 scanned pages: hand batches of 10–20 pages to
+   subagents in parallel, each with the rules above, the PDF path and its page range,
+   and each writing its pages to a file in your scratchpad. Then put them into
+   `kb/raw/<doc>.md` in page order yourself.
+4. **Finish.** `uv run learnkb-ingest --transcribed <doc>` records it and rebuilds the
+   outline. Read the new outline before step 3: its headings are what pages will cite.
 
 ### 2. Get your bearings
 Read `kb/index.json` if it exists. It lists every page with its title, definition
@@ -98,6 +131,8 @@ Summarise for the user:
 - any contradictions you found
 - any badly parsed content in `kb/raw/`, such as garbled tables or OCR noise, starting
   from the outline's *Possible conversion losses*
+- scanned documents: whether you kept the OCR or transcribed them, and any `[illegible]`
+  passages
 
 ## Page formats
 

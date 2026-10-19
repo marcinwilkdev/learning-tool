@@ -8,6 +8,12 @@ Next to each kb/raw/<doc>.md goes kb/raw/<doc>.outline.md: a reading plan that s
 long documents into parts at headings, the places where conversion probably lost
 content (commands that were images, code flattened onto one line), and every heading
 with its line number. Outlines are regenerated whenever they're missing or stale.
+
+Scanned pages (no text layer) go through OCR, which is fine for print but garbles
+handwriting while still reporting high confidence. So a document with scanned pages is
+flagged `transcription: pending`; the ingest skill compares a page image with the OCR
+draft and either keeps it (`--ocr-ok`) or transcribes the pages itself (`--transcribed`).
+Pages are marked `<!-- page N -->` in kb/raw so a transcription can replace just them.
 """
 
 import argparse
@@ -15,6 +21,7 @@ import hashlib
 import json
 import re
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,11 +33,34 @@ KB = ROOT / "kb"
 RAW = KB / "raw"
 MANIFEST = KB / "manifest.json"
 PART_CHARS = 60_000  # about 15k tokens: comfortably under one Read call's limit
+MIN_PAGE_TEXT = 20  # characters of text layer below which a page counts as scanned
+PAGE_BREAK = "<!-- page break -->"
+# Letters NFKD doesn't decompose into ASCII plus an accent.
+ASCII_LETTERS = str.maketrans({"ł": "l", "Ł": "L", "ø": "o", "Ø": "O", "đ": "d", "Đ": "D",
+                               "ß": "ss", "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE"})
 
 
 def slugify(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    plain = unicodedata.normalize("NFKD", name.translate(ASCII_LETTERS))
+    plain = "".join(c for c in plain if not unicodedata.combining(c))
+    slug = re.sub(r"[^a-z0-9]+", "-", plain.lower()).strip("-")
     return slug or "document"
+
+
+def library_key(pdf: Path) -> str:
+    # NFC, because macOS hands out file names decomposed ("A" + combining ogonek).
+    return unicodedata.normalize("NFC", str(pdf.relative_to(LIBRARY)))
+
+
+def page_ranges(pages: list[int]) -> str:
+    """[1, 2, 3, 7] -> '1–3, 7'"""
+    runs: list[list[int]] = []
+    for p in pages:
+        if runs and p == runs[-1][1] + 1:
+            runs[-1][1] = p
+        else:
+            runs.append([p, p])
+    return ", ".join(f"{a}–{b}" if b > a else str(a) for a, b in runs)
 
 
 def sha256(path: Path) -> str:
@@ -43,8 +73,15 @@ def sha256(path: Path) -> str:
 
 def load_manifest() -> dict:
     if MANIFEST.exists():
-        return json.loads(MANIFEST.read_text())
+        manifest = json.loads(MANIFEST.read_text())
+        manifest["documents"] = {unicodedata.normalize("NFC", k): v
+                                 for k, v in manifest["documents"].items()}
+        return manifest
     return {"documents": {}}
+
+
+def manifest_entry(slug: str) -> dict:
+    return next((d for d in load_manifest()["documents"].values() if d["slug"] == slug), {})
 
 
 def save_manifest(manifest: dict) -> None:
@@ -64,6 +101,23 @@ def make_converter():
     return DocumentConverter(
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
     )
+
+
+def scanned_pages(pdf: Path) -> list[int]:
+    """1-based numbers of pages without a usable text layer, i.e. images of a page."""
+    import pypdfium2  # a docling dependency
+
+    doc = pypdfium2.PdfDocument(pdf)
+    try:
+        return [i + 1 for i in range(len(doc))
+                if len(doc[i].get_textpage().get_text_range().strip()) < MIN_PAGE_TEXT]
+    finally:
+        doc.close()
+
+
+def number_pages(markdown: str) -> str:
+    pages = markdown.split(PAGE_BREAK)
+    return "\n\n".join(f"<!-- page {n} -->\n\n{p.strip()}" for n, p in enumerate(pages, 1)) + "\n"
 
 
 # ---------------------------------------------------------------- outline
@@ -92,7 +146,10 @@ def blocks(lines: list[str]) -> list[tuple[int, str]]:
 def conversion_losses(lines: list[str]) -> dict[str, list[int]]:
     """1-based line numbers where the PDF conversion probably lost or mangled content."""
     lost_image, lost_text, flattened, figures = [], [], [], []
-    bs = blocks(lines)
+    bs = [b for b in blocks(lines) if not re.fullmatch(r"<!-- page \d+ -->", b[1])]
+    for start, text in bs:
+        if text.startswith("<!-- figure"):  # a transcriber's description of a figure
+            figures.append(start + 1)
     for (_, text), (start, nxt) in zip(bs, bs[1:]):
         # "Run this command:" followed by an image (or by prose) instead of the code it announces.
         if (text.rstrip().endswith(":") and not text.startswith(("```", "#", "|", "<!--", "$"))
@@ -104,7 +161,25 @@ def conversion_losses(lines: list[str]) -> dict[str, list[int]]:
     for n, line in enumerate(lines, 1):
         if len(re.findall(r"(?:^|\s)\$ \S", line)) > 1:
             flattened.append(n)
-    return {"lost_image": lost_image, "lost_text": lost_text, "flattened": flattened, "figures": figures}
+    return {"lost_image": lost_image, "lost_text": lost_text, "flattened": flattened,
+            "figures": sorted(figures)}
+
+
+def scan_note(entry: dict) -> list[str]:
+    """The outline's warning about scanned pages, by transcription status."""
+    pages = entry.get("scanned_pages")
+    if not pages:
+        return []
+    where = f"Scanned pages: {page_ranges(pages)} of {entry.get('pages') or '?'}."
+    note = {
+        "pending": "**Transcription pending.** The text of these pages is an OCR draft and may "
+                   "be garbled (handwriting especially). Compare a page image with it and "
+                   "transcribe before reading on: see the ingest skill.",
+        "transcribed": "Transcribed from the page images; figures are described in "
+                       "`<!-- figure: ... -->` comments.",
+        "ocr": "OCR checked against the page images and kept.",
+    }.get(entry.get("transcription"), "")
+    return [f"> {where} {note}", ""]
 
 
 def reading_parts(lines: list[str], heads: list[int]) -> list[tuple[int, int]]:
@@ -142,6 +217,7 @@ def write_outline(raw: Path) -> Path:
     out = [f"# Outline of kb/raw/{raw.name}", "",
            f"{len(lines):,} lines, {len(text) / 1000:,.0f} KB, about {len(text) // 4000}k tokens. "
            "Generated by `learnkb-ingest`; don't edit.", "",
+           *scan_note(manifest_entry(raw.stem)),
            "## Reading plan", "",
            "Read the document part by part with `Read` (offset = first line, limit = line count).", "",
            "| Part | Lines | Size | Starts at |", "|---|---|---|---|"]
@@ -196,11 +272,15 @@ def ingest(force: bool = False) -> int:
     failures = 0
 
     for pdf in pdfs:
-        rel = str(pdf.relative_to(LIBRARY))
+        rel = library_key(pdf)
         digest = sha256(pdf)
         entry = docs.get(rel)
         if entry and entry["sha256"] == digest and not force:
             print(f"skip     {rel} (unchanged)")
+            continue
+        if entry and entry["sha256"] == digest and entry.get("transcription") == "transcribed":
+            # --force would throw away a hand transcription and bring back the OCR draft.
+            print(f"skip     {rel} (transcribed; remove its manifest entry to re-convert)")
             continue
 
         slug = entry["slug"] if entry else slugify(pdf.stem)
@@ -220,7 +300,8 @@ def ingest(force: bool = False) -> int:
             continue
 
         doc = result.document
-        (RAW / f"{slug}.md").write_text(doc.export_to_markdown())
+        (RAW / f"{slug}.md").write_text(number_pages(doc.export_to_markdown(page_break_placeholder=PAGE_BREAK)))
+        scanned = scanned_pages(pdf)
         docs[rel] = {
             "slug": slug,
             "title": getattr(doc, "name", None) or pdf.stem,
@@ -228,27 +309,55 @@ def ingest(force: bool = False) -> int:
             "pages": doc.num_pages() if hasattr(doc, "num_pages") else None,
             "converted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "wiki_built": False,
+            **({"scanned_pages": scanned, "transcription": "pending"} if scanned else {}),
         }
+        if scanned:
+            print(f"scanned  {rel}: pages {page_ranges(scanned)} have no text layer; OCR draft needs checking")
         save_manifest(manifest)  # save after each doc so a crash loses little work
 
     # Drop manifest entries whose PDF was removed from the library.
-    present = {str(p.relative_to(LIBRARY)) for p in pdfs}
+    present = {library_key(p) for p in pdfs}
     for rel in [k for k in docs if k not in present]:
         print(f"removed  {rel}")
         docs[rel]["removed"] = True
     save_manifest(manifest)
     refresh_outlines()
 
-    pending = [d["slug"] for d in docs.values() if not d["wiki_built"] and not d.get("removed")]
+    live = [d for d in docs.values() if not d.get("removed")]
+    pending = [d["slug"] for d in live if not d["wiki_built"]]
+    transcribe = [d["slug"] for d in live if d.get("transcription") == "pending"]
     activity.record("parse", f"{len(pending)} document(s) awaiting wiki ingest")
     print(f"\n{len(pending)} document(s) awaiting wiki ingest: {', '.join(pending) or '-'}")
+    if transcribe:
+        print(f"{len(transcribe)} awaiting transcription check: {', '.join(transcribe)}")
     return 1 if failures else 0
+
+
+def mark_transcription(slug: str, status: str) -> int:
+    """Record the skill's verdict on a scanned document and refresh its outline."""
+    manifest = load_manifest()
+    entry = next((d for d in manifest["documents"].values() if d["slug"] == slug), None)
+    if entry is None or not entry.get("scanned_pages"):
+        print(f"No scanned document with slug {slug!r} in the manifest", file=sys.stderr)
+        return 1
+    entry["transcription"] = status
+    save_manifest(manifest)
+    print(f"{status:<8} {slug}\noutline  kb/raw/{write_outline(RAW / f'{slug}.md').name}")
+    return 0
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--force", action="store_true", help="re-convert every PDF")
-    sys.exit(ingest(force=parser.parse_args().force))
+    mark = parser.add_mutually_exclusive_group()
+    mark.add_argument("--transcribed", metavar="SLUG",
+                      help="kb/raw/SLUG.md now holds a transcription of the scanned pages")
+    mark.add_argument("--ocr-ok", metavar="SLUG", help="the OCR draft of SLUG's scanned pages is good enough")
+    args = parser.parse_args()
+    if args.transcribed or args.ocr_ok:
+        sys.exit(mark_transcription(args.transcribed or args.ocr_ok,
+                                    "transcribed" if args.transcribed else "ocr"))
+    sys.exit(ingest(force=args.force))
 
 
 if __name__ == "__main__":

@@ -151,6 +151,9 @@ def check(pages: dict[str, Page], manifest: dict, curriculum: dict, report: Repo
             report.warn(f"document '{slug}' is marked wiki_built but has no source page")
         if not doc.get("wiki_built"):
             report.warn(f"document '{slug}' not yet ingested into the wiki")
+        if doc.get("transcription") == "pending":
+            report.warn(f"document '{slug}' has scanned pages whose OCR draft hasn't been checked "
+                        "(learnkb-ingest --transcribed or --ocr-ok)")
 
     for slug, page in topics.items():
         rel = f"topics/{slug}.md"

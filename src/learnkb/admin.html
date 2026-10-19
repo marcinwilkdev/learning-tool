@@ -219,6 +219,8 @@ function renderDocs(d) {
     const badges = [
       doc.unconverted ? `<span class="badge now">not converted: run learnkb-ingest</span>` : `<span class="badge yes">converted</span>`,
       p ? `<span class="badge ${p.outline ? "yes" : ""}">outline</span>` : "",
+      doc.transcription ? `<span class="badge ${doc.transcription === "pending" ? "now" : "yes"}" title="${doc.scanned_pages} scanned page(s)">${
+        {pending: "scanned: transcription pending", transcribed: "scanned: transcribed", ocr: "scanned: OCR kept"}[doc.transcription] || doc.transcription}</span>` : "",
       doc.slug ? `<span class="badge ${doc.source_page ? "yes" : ""}">source page</span>` : "",
       doc.slug ? `<span class="badge ${doc.wiki_built ? "yes" : "now"}">${doc.wiki_built ? "wiki built" : "wiki pending"}</span>` : "",
       doc.removed ? `<span class="badge">removed from library</span>` : "",
