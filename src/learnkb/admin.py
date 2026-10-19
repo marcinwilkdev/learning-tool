@@ -68,7 +68,7 @@ def document_plan(slug: str, cited: set[str], steps: list[dict]) -> dict | None:
     raw = RAW / f"{slug}.md"
     if not raw.exists():
         return None
-    lines = raw.read_text().splitlines()
+    lines = raw.read_text(encoding="utf-8").splitlines()
     heads = [i for i, l in enumerate(lines) if l.startswith("#")]
     # The latest step for a part wins, so a skipped part that's read later counts as read.
     status: dict[int, str] = {}

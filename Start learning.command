@@ -15,7 +15,7 @@ fail() {
 }
 
 # Already running (another window, or started from a terminal): just open it.
-if curl -s -o /dev/null -I "http://localhost:$PORT/admin/"; then
+if curl -sf -o /dev/null -I "http://localhost:$PORT/admin/"; then
   echo "The learning site is already running; opening it."
   open "http://localhost:$PORT/"
   exit 0

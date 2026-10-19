@@ -21,7 +21,7 @@ def record(phase: str, message: str = "", doc: str | None = None, part: int | No
     ACTIVITY.parent.mkdir(parents=True, exist_ok=True)
     entry = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "phase": phase,
              "message": message, "doc": doc, "part": part, "skipped": skipped or None}
-    with ACTIVITY.open("a") as f:
+    with ACTIVITY.open("a", encoding="utf-8") as f:
         f.write(json.dumps({k: v for k, v in entry.items() if v not in (None, "")}) + "\n")
 
 
@@ -30,7 +30,7 @@ def recent(limit: int | None = 200) -> list[dict]:
     if not ACTIVITY.exists():
         return []
     out = []
-    lines = ACTIVITY.read_text().splitlines()
+    lines = ACTIVITY.read_text(encoding="utf-8").splitlines()
     for line in lines[-limit:] if limit else lines:
         try:
             out.append(json.loads(line))

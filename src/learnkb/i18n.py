@@ -318,7 +318,7 @@ def use(language: str | None = None) -> str:
     global lang, strings
     if language is None:
         try:
-            language = json.loads(SITE_CONFIG.read_text()).get("lang", "en") if SITE_CONFIG.exists() else "en"
+            language = json.loads(SITE_CONFIG.read_text(encoding="utf-8")).get("lang", "en") if SITE_CONFIG.exists() else "en"
         except json.JSONDecodeError as exc:
             print(f"WARN   site.json: {exc}; using English", file=sys.stderr)
             language = "en"

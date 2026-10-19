@@ -80,7 +80,7 @@ def load_records(pages, order) -> tuple[list[tuple[Path, dict]], list[str]]:
     records, errs = [], []
     for path in sorted(RECORDS.glob("*.json")):
         try:
-            rec = json.loads(path.read_text())
+            rec = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             errs.append(f"{path.name}: invalid JSON: {exc}")
             continue
@@ -254,8 +254,8 @@ def rebuild(pages, curriculum, order) -> dict | None:
     for w in warnings:
         print(f"WARN   {w}")
     LEARNER.mkdir(exist_ok=True)
-    STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
-    VIEW.write_text(render_md(state, curriculum, date.today()))
+    STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    VIEW.write_text(render_md(state, curriculum, date.today()), encoding="utf-8")
     return state
 
 
@@ -273,7 +273,7 @@ def main() -> None:
     pages, curriculum, order = load_kb()
 
     if args.cmd == "record":
-        data = json.loads(args.file.read_text())
+        data = json.loads(args.file.read_text(encoding="utf-8"))
         errs = validate(data, pages, order)
         if errs:
             for e in errs:
@@ -302,7 +302,7 @@ def main() -> None:
             t = state["topics"][args.topic]
             print(topic_md(args.topic, t, date.today()) if t["attempts"] else f"{t['title']}: not assessed yet")
         else:
-            print(VIEW.read_text())
+            print(VIEW.read_text(encoding="utf-8"))
     else:
         if rebuild(pages, curriculum, order):
             print(f"rebuilt {STATE.relative_to(ROOT)} and {VIEW.relative_to(ROOT)}")

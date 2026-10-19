@@ -1,0 +1,5 @@
+* text=auto
+# cmd.exe misreads batch files with LF line endings; bash needs LF.
+*.bat text eol=crlf
+*.command text eol=lf
+*.pdf binary

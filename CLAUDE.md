@@ -6,7 +6,8 @@ knowledge is tracked over time.
 
 ## Branches
 - **`main`** holds only the harness: `.claude/skills/`, `src/learnkb/`, `pyproject.toml`,
-  `uv.lock`, `.python-version`, `library/.gitkeep`, `Start learning.command`. It has no subject content: no `kb/`, no
+  `uv.lock`, `.python-version`, `library/.gitkeep`, `Start learning.command` (macOS) and
+  `Start learning.bat` (Windows). It has no subject content: no `kb/`, no
   `learner/`, no PDFs.
 - **`learn/<subject>`** (for example `learn/git`) is one branch per subject, branched from main.
   It adds that subject's `library/*.pdf`, `kb/` (wiki, lessons, quizzes) and `learner/`
@@ -32,7 +33,8 @@ Then run `/ingest`, `/learning-page all` and `/assess <topic>`, and commit `libr
 and `learner/` on the branch.
 
 ## Daily loop
-1. Double-click `Start learning.command` in Finder, or run `uv run learnkb-serve --open`:
+1. Double-click `Start learning.command` (macOS) or `Start learning.bat` (Windows), or run
+   `uv run learnkb-serve --open`:
    the site on http://localhost:8000, the admin panel on
    http://localhost:8000/admin/. It rebuilds the site whenever `kb/` changes, so leave it running.
    (Safari blocks pages opened from `file://`.)

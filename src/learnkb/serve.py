@@ -78,6 +78,11 @@ class Rebuilder(threading.Thread):
 
 def handler(watcher: admin.Watcher):
     class Handler(SimpleHTTPRequestHandler):
+        # Windows guesses types from the registry, which may call .js text/plain.
+        extensions_map = {**SimpleHTTPRequestHandler.extensions_map,
+                          ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+                          ".css": "text/css; charset=utf-8", ".json": "application/json"}
+
         def log_message(self, fmt, *args):  # keep the terminal quiet
             pass
 
@@ -128,7 +133,7 @@ def handler(watcher: admin.Watcher):
             INBOX.mkdir(parents=True, exist_ok=True)
             path = INBOX / f"{topic}--{attempt}.txt"
             new = not path.exists()
-            path.write_text(text + "\n")
+            path.write_text(text + "\n", encoding="utf-8")
             if new:
                 say(f"saved {path.relative_to(LEARNER.parent)}: run /assess in Claude Code to review it")
             self.reply(200, {"saved": str(path.relative_to(LEARNER.parent))})

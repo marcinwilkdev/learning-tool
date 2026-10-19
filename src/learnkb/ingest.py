@@ -72,7 +72,7 @@ def sha256(path: Path) -> str:
 
 def load_manifest() -> dict:
     if MANIFEST.exists():
-        manifest = json.loads(MANIFEST.read_text())
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
         manifest["documents"] = {unicodedata.normalize("NFC", k): v
                                  for k, v in manifest["documents"].items()}
         return manifest
@@ -85,7 +85,7 @@ def manifest_entry(slug: str) -> dict:
 
 def save_manifest(manifest: dict) -> None:
     KB.mkdir(parents=True, exist_ok=True)
-    MANIFEST.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+    MANIFEST.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def make_converter():
@@ -216,7 +216,7 @@ def reading_parts(lines: list[str], heads: list[int]) -> list[tuple[int, int]]:
 
 
 def write_outline(raw: Path) -> Path:
-    text = raw.read_text()
+    text = raw.read_text(encoding="utf-8")
     lines = text.splitlines()
     heads = [i for i, l in enumerate(lines) if l.startswith("#")]
     title = lambda i: lines[i].lstrip("#").strip()
@@ -249,7 +249,7 @@ def write_outline(raw: Path) -> Path:
     for h, nxt in zip(heads, heads[1:] + [len(lines)]):
         out.append(f"| {h + 1} | {kb(h, nxt)} | {title(h).replace('|', '/')} |")
     path = raw.with_suffix(".outline.md")
-    path.write_text("\n".join(out) + "\n")
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
     return path
 
 
@@ -308,7 +308,7 @@ def ingest(force: bool = False) -> int:
             continue
 
         doc = result.document
-        (RAW / f"{slug}.md").write_text(paged_markdown(doc))
+        (RAW / f"{slug}.md").write_text(paged_markdown(doc), encoding="utf-8")
         scanned = scanned_pages(pdf)
         docs[rel] = {
             "slug": slug,

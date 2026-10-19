@@ -96,7 +96,7 @@ def load_pages(report: Report) -> dict[str, Page]:
     for kind, folder in SECTIONS.items():
         for path in sorted((KB / folder).glob("*.md")):
             rel = path.relative_to(KB)
-            match = FRONTMATTER.match(path.read_text())
+            match = FRONTMATTER.match(path.read_text(encoding="utf-8"))
             if not match:
                 report.error(f"{rel}: missing YAML frontmatter")
                 continue
@@ -193,7 +193,7 @@ def check_sections(pages: dict[str, Page], report: Report) -> None:
             doc = src.get("doc")
             if doc not in headings:
                 raw = RAW / f"{doc}.md"
-                headings[doc] = ({norm(l.lstrip("#")) for l in raw.read_text().splitlines() if l.startswith("#")}
+                headings[doc] = ({norm(l.lstrip("#")) for l in raw.read_text(encoding="utf-8").splitlines() if l.startswith("#")}
                                  if raw.exists() else None)
             if headings[doc] is not None and norm(src["section"]) not in headings[doc]:
                 report.warn(f"{page.path.relative_to(KB)}: section '{src['section']}' is not a heading in raw/{doc}.md")
@@ -265,7 +265,7 @@ def build_index(pages: dict[str, Page], curriculum: dict) -> dict:
 
 
 def read_json(path: Path) -> dict:
-    return json.loads(path.read_text()) if path.exists() else {}
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
 def main() -> None:
@@ -295,7 +295,7 @@ def main() -> None:
         print("index.json not updated")
         sys.exit(1)
     KB.mkdir(parents=True, exist_ok=True)
-    INDEX.write_text(json.dumps(build_index(pages, curriculum), indent=2, ensure_ascii=False) + "\n")
+    INDEX.write_text(json.dumps(build_index(pages, curriculum), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print("index.json updated")
 
 

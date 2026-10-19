@@ -170,7 +170,7 @@ def load_yaml(rel: str, pages: dict[str, Page], report: Report) -> dict | None:
     if not path.exists():
         return None
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
         report.error(f"{rel}: {yaml_error(exc)}")
         return None
@@ -678,23 +678,23 @@ def build(only: list[str] | None = None) -> int:
         (SITE / folder).mkdir(parents=True, exist_ok=True)
     for asset in ASSETS.iterdir():
         shutil.copy(asset, SITE / "assets" / asset.name)
-    (SITE / "assets" / "code.css").write_text(code_css())
-    (SITE / "assets" / "data.js").write_text(data_js(pages, curriculum))
-    (SITE / "index.html").write_text(index_page(pages, curriculum, lessons, quizzes))
-    (SITE / "glossary.html").write_text(glossary_page(pages, curriculum))
+    (SITE / "assets" / "code.css").write_text(code_css(), encoding="utf-8")
+    (SITE / "assets" / "data.js").write_text(data_js(pages, curriculum), encoding="utf-8")
+    (SITE / "index.html").write_text(index_page(pages, curriculum, lessons, quizzes), encoding="utf-8")
+    (SITE / "glossary.html").write_text(glossary_page(pages, curriculum), encoding="utf-8")
 
     topics = only or order
     for slug in topics:
         (SITE / "topics" / f"{slug}.html").write_text(
-            topic_page(pages[slug], pages, curriculum, lessons, quizzes, order))
+            topic_page(pages[slug], pages, curriculum, lessons, quizzes, order), encoding="utf-8")
         if slug in quizzes:
-            (SITE / "quizzes" / f"{slug}.html").write_text(quiz_page(pages[slug], quizzes[slug], pages, curriculum))
+            (SITE / "quizzes" / f"{slug}.html").write_text(quiz_page(pages[slug], quizzes[slug], pages, curriculum), encoding="utf-8")
     # Concept and source pages are cheap and linked from everywhere: always rebuild them.
     for p in pages.values():
         if p.kind == "concept":
-            (SITE / "concepts" / f"{p.slug}.html").write_text(concept_page(p, pages, curriculum, backlinks))
+            (SITE / "concepts" / f"{p.slug}.html").write_text(concept_page(p, pages, curriculum, backlinks), encoding="utf-8")
         elif p.kind == "source":
-            (SITE / "sources" / f"{p.slug}.html").write_text(source_page(p, pages, curriculum))
+            (SITE / "sources" / f"{p.slug}.html").write_text(source_page(p, pages, curriculum), encoding="utf-8")
 
     with_lessons = [t for t in topics if t in lessons]
     print(f"built {len(topics)} topic page(s) ({len(with_lessons)} with lessons, "

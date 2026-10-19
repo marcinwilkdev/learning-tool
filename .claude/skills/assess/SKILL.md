@@ -59,10 +59,11 @@ So this skill has two modes. Pick one from the arguments.
      --screenshot=<scratchpad>/quiz-<slug>.png --window-size=1280,4000 \
      "file://$PWD/site/quizzes/<slug>.html"
    ```
+   On Windows, Chrome is `"C:/Program Files/Google/Chrome/Application/chrome.exe"`.
    Read the PNG. Look for overflowing code, very long options, and options whose length
    gives the answer away.
 8. **Report.** Give the path `site/quizzes/<slug>.html` and offer to open it with
-   `open site/quizzes/<slug>.html`. Tell the learner that after the quiz they can paste
+   http://localhost:8000/quizzes/<slug>.html (with `learnkb-serve` running). Tell the learner that after the quiz they can paste
    their copied results back into `/assess` for feedback.
 
 ## Mode B: review pasted results

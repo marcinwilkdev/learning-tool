@@ -49,6 +49,7 @@ into a guided lesson. The generator places each piece into the page.
      --screenshot=<scratchpad>/<slug>.png --window-size=1280,3000 \
      "file://$PWD/site/topics/<slug>.html"
    ```
+   On Windows, Chrome is `"C:/Program Files/Google/Chrome/Application/chrome.exe"`.
    Read the PNG. Look for broken layout, overflowing terminals, empty sections, and
    steps that are too long to read comfortably. Fix them, then re-render.
 7. **Report.** Give the path `site/topics/<slug>.html`, and offer to open it
