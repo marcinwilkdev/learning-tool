@@ -140,6 +140,13 @@
     });
   }
 
+  // ---------- admin panel link ----------
+  // Only `learnkb-serve` has the panel, so the link stays hidden until it answers.
+  const adminLink = document.querySelector("[data-admin-link]");
+  if (adminLink && location.protocol !== "file:") {
+    fetch(PREFIX + "admin/", { method: "HEAD" }).then((r) => { if (r.ok) adminLink.hidden = false; }, () => {});
+  }
+
   // ---------- mobile menu ----------
   const menu = document.querySelector("[data-menu]");
   menu && menu.addEventListener("click", () => document.body.classList.toggle("menu-open"));

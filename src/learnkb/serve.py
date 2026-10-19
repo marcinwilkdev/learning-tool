@@ -94,6 +94,15 @@ def handler(watcher: admin.Watcher):
             else:
                 super().do_GET()
 
+        def do_HEAD(self):
+            # The site asks HEAD /admin/ to decide whether to show its link to the panel.
+            if self.path.split("?")[0] in ("/admin", "/admin/"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+            else:
+                super().do_HEAD()
+
         def reply(self, code: int, payload: dict) -> None:
             body = json.dumps(payload).encode()
             self.send_response(code)

@@ -97,6 +97,8 @@ h1, h2, h3 { line-height: 1.25; letter-spacing: -.01em; }
 .nav-module a:hover { background: var(--surface-2); }
 .nav-module a[aria-current] { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
 .nav-extra { display: block; margin-top: 12px; padding: 8px; color: var(--muted); font-size: .9rem; text-decoration: none; border-top: 1px solid var(--border); }
+.nav-extra + .nav-extra { margin-top: 0; border-top: 0; }
+.nav-extra[hidden] { display: none; }
 .done-dot {
   flex: none; width: 16px; height: 16px; border-radius: 50%;
   border: 2px solid var(--border); display: inline-grid; place-items: center;

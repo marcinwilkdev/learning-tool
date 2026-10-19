@@ -400,7 +400,9 @@ def sidebar(curriculum: dict, pages, prefix: str, current: str | None) -> str:
             f'{esc(curriculum.get("title", t("kb_title")))}</a>'
             f'<div class="progress-mini"><div class="bar"><span data-progress-bar></span></div>'
             f'<span data-progress-text></span></div>{"".join(mods)}'
-            f'<a class="nav-extra" href="{prefix}glossary.html">{t("glossary")}</a></nav>')
+            f'<a class="nav-extra" href="{prefix}glossary.html">{t("glossary")}</a>'
+            f'<a class="nav-extra" href="{prefix}admin/" target="learnkb-admin" data-admin-link hidden>'
+            f'{t("admin_panel")}</a></nav>')
 
 
 def layout(title: str, body: str, curriculum: dict, pages, prefix: str,
