@@ -13,7 +13,7 @@ from disk, so the panel can be started or restarted at any point of a build:
 - activity: build steps (see `learnkb-admin step`) and recently written files
 
 PDFs dropped on the panel are posted to `api/upload` and saved in library/, ready for
-`/ingest`; nothing is converted until then. Uploads are refused on main, which holds no
+`/build-course`; nothing is converted until then. Uploads are refused on main, which holds no
 subject content.
 
 The panel speaks English or Polish: the viewer's pick (the toggle in its header), else
@@ -343,7 +343,7 @@ def upload(request: BaseHTTPRequestHandler, name: str) -> tuple[int, dict]:
         partial.replace(target)
     finally:
         partial.unlink(missing_ok=True)
-    print(f"added library/{name}: run /ingest in Claude Code", file=sys.__stdout__, flush=True)
+    print(f"added library/{name}: run /build-course in Claude Code", file=sys.__stdout__, flush=True)
     return 200, {"saved": f"library/{name}"}
 
 

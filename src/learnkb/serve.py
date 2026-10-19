@@ -38,7 +38,7 @@ QUIET = 1.5  # seconds without changes before the site is rebuilt
 NO_SITE = b"""<!doctype html><html><head><meta charset="utf-8"><title>No site yet</title>
 <style>body{font:16px system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
 </head><body><h1>No learning site yet</h1>
-<p>The site is built from <code>kb/</code> as soon as it holds a valid wiki: run <code>/ingest</code>
+<p>The site is built from <code>kb/</code> as soon as it holds a valid wiki: run <code>/build-course</code>
 in Claude Code and this page will turn into the site. Meanwhile, watch the build in the
 <a href="/admin/">admin panel</a>.</p></body></html>"""
 
