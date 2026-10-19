@@ -4,7 +4,9 @@
 
 - `/` is the learning site from site/. It's rebuilt at start and again whenever kb/
   changes, so lessons and quizzes appear as they're written. A build that fails (a
-  half-written page mid-ingest, say) keeps the last good site.
+  half-written page mid-ingest, say) keeps the last good site. Until a knowledge base is
+  built (kb/index.json, written once `learnkb-check` passes), `/` redirects to the admin
+  panel, where a new subject starts.
 - `/admin/` is the admin panel (see admin.py): build progress, coverage and health, live,
   and a drop zone that adds PDFs to library/.
 - `/api/results` takes a quiz page's results and saves them as
@@ -26,6 +28,7 @@ import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from learnkb import admin
+from learnkb.check import INDEX
 from learnkb.learner import LEARNER
 from learnkb.site import SITE, build
 
@@ -34,14 +37,6 @@ SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 ATTEMPT = re.compile(r"^[0-9T-]{10,25}$")
 MAX_BYTES = 256 * 1024
 QUIET = 1.5  # seconds without changes before the site is rebuilt
-
-NO_SITE = b"""<!doctype html><html><head><meta charset="utf-8"><title>No site yet</title>
-<style>body{font:16px system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
-</head><body><h1>No learning site yet</h1>
-<p>The site is built from <code>kb/</code> as soon as it holds a valid wiki: run <code>/build-course</code>
-in Claude Code and this page will turn into the site. Meanwhile, watch the build in the
-<a href="/admin/">admin panel</a>.</p></body></html>"""
-
 
 def say(message: str) -> None:
     # Straight to the terminal: a rebuild in another thread may be redirecting stdout.
@@ -95,8 +90,13 @@ def handler(watcher: admin.Watcher):
                 self.end_headers()
             elif path.startswith("/admin/"):
                 admin.handle_get(self, path[len("/admin/"):], watcher)
-            elif path in ("/", "/index.html") and not (SITE / "index.html").exists():
-                admin.send(self, NO_SITE, "text/html; charset=utf-8")
+            elif path in ("/", "/index.html") and not (INDEX.exists() and (SITE / "index.html").exists()):
+                # No knowledge base yet (or site/ is left over from another branch): start in the panel.
+                # Not cached, so / becomes the site once the wiki is built.
+                self.send_response(302)
+                self.send_header("Location", "/admin/")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
             else:
                 super().do_GET()
 
