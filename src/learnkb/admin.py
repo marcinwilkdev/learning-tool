@@ -13,8 +13,7 @@ from disk, so the panel can be started or restarted at any point of a build:
 - activity: build steps (see `learnkb-admin step`) and recently written files
 
 PDFs dropped on the panel are posted to `api/upload` and saved in library/, ready for
-`/build-course`; nothing is converted until then. Uploads are refused on main, which holds no
-subject content.
+`/build-course`; nothing is converted until then.
 
 The panel speaks English or Polish: the viewer's pick (the toggle in its header), else
 the language kb/site.json gives the site, else the browser's.
@@ -29,7 +28,6 @@ import argparse
 import html
 import json
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -43,7 +41,7 @@ from urllib.parse import parse_qs, urlsplit
 from learnkb import activity
 from learnkb.check import CURRICULUM, SECTIONS, Report, as_list, check, load_pages, read_json
 from learnkb.i18n import SITE_CONFIG
-from learnkb.ingest import KB, LIBRARY, MANIFEST, RAW, ROOT, library_key, load_manifest, reading_parts
+from learnkb.ingest import KB, LIBRARY, MANIFEST, RAW, library_key, load_manifest, reading_parts
 from learnkb.site import load_extras
 
 PAGE = Path(__file__).parent / "admin.html"
@@ -71,15 +69,6 @@ def site_lang() -> str | None:
     try:
         return json.loads(SITE_CONFIG.read_text(encoding="utf-8")).get("lang")
     except (OSError, ValueError, AttributeError):
-        return None
-
-
-def git_branch() -> str | None:
-    try:
-        out = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT,
-                             capture_output=True, text=True, timeout=5)
-        return out.stdout.strip() or None
-    except (OSError, subprocess.SubprocessError):
         return None
 
 
@@ -171,7 +160,7 @@ def recent_files(limit: int = RECENT_FILES) -> tuple[list[dict], dict]:
 
 def snapshot() -> dict:
     steps = activity.recent()
-    snap = {"generated_at": iso(time.time()), "branch": git_branch(), "kb": KB.exists(), "lang": site_lang(),
+    snap = {"generated_at": iso(time.time()), "kb": KB.exists(), "lang": site_lang(),
             "steps": steps[-60:], "phases": activity.PHASES}
     if not KB.exists():
         snap["documents"] = documents({}, steps)  # PDFs added before the first /ingest
@@ -203,7 +192,7 @@ def safe_snapshot() -> dict:
     try:
         return snapshot()
     except Exception:
-        return {"generated_at": iso(time.time()), "kb": KB.exists(), "branch": git_branch(),
+        return {"generated_at": iso(time.time()), "kb": KB.exists(),
                 "steps": activity.recent()[-60:], "phases": activity.PHASES,
                 "failure": traceback.format_exc(limit=3)}
 
@@ -312,8 +301,6 @@ def upload(request: BaseHTTPRequestHandler, name: str) -> tuple[int, dict]:
         return refuse(403, "host", "uploads are only accepted from localhost")
     if request.headers.get("Content-Type") != "application/pdf":
         return refuse(415, "type", "expected Content-Type: application/pdf")
-    if git_branch() == "main":
-        return refuse(409, "main", "main holds no subject content: switch to a learn/<subject> branch first")
     name = unicodedata.normalize("NFC", Path(name.replace("\\", "/")).name.strip())
     if not name.lower().endswith(".pdf") or name.startswith(".") or any(ord(c) < 32 for c in name):
         return refuse(400, "name", "expected a .pdf file name")

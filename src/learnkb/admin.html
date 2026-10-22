@@ -132,7 +132,6 @@ button.chip { font: inherit; font-size: 13px; color: var(--text); cursor: pointe
 <main>
   <header>
     <h1 data-i18n="title">Knowledge base admin</h1>
-    <span class="chip" id="branch" hidden></span>
     <span class="spacer"></span>
     <button type="button" class="chip" id="lang"></button>
     <a class="chip" href="../" target="learnkb-site" data-i18n="site_link">Learning site ↗</a>
@@ -196,7 +195,7 @@ const STR = {
       <button type="button" class="linkbtn" id="pick-btn">choose files</button>.
       <span class="muted">Then run <code>/build-course</code> in Claude Code.</span>`,
     no_pdfs: "No PDFs in <code>library/</code> yet.",
-    no_kb: "No <code>kb/</code> on this branch. Switch to a learning branch, or add PDFs and run <code>/build-course</code>.",
+    no_kb: "No knowledge base yet. Add PDFs above and run <code>/build-course</code>.",
     b_unconverted: "not converted: run /build-course", b_converted: "converted", b_outline: "outline",
     scanned: (n) => `${n} scanned page(s)`, tr_pending: "scanned: transcription pending", tr_transcribed: "scanned: transcribed",
     tr_ocr: "scanned: OCR kept", b_source: "source page", b_wiki_built: "wiki built", b_wiki_pending: "wiki pending",
@@ -217,7 +216,6 @@ const STR = {
     uploading: "uploading…", not_pdf: "not a PDF, skipped", already: "already in library/, skipped",
     added: (p) => `added as ${p}`, failed: (s) => `failed (HTTP ${s})`, net: "upload failed: is learnkb-serve still running?",
     "err:host": "uploads are only accepted from localhost", "err:type": "expected Content-Type: application/pdf",
-    "err:main": "main holds no subject content: switch to a learn/<subject> branch first",
     "err:name": "expected a .pdf file name", "err:size": (j) => `empty or larger than ${j.max_mb} MB`,
     "err:exists": "already in library/", "err:short": "upload cut short", "err:notpdf": "not a PDF file",
   },
@@ -237,7 +235,7 @@ const STR = {
       <button type="button" class="linkbtn" id="pick-btn">wybierz pliki</button>.
       <span class="muted">Potem uruchom <code>/build-course</code> w Claude Code.</span>`,
     no_pdfs: "Brak PDF-ów w <code>library/</code>.",
-    no_kb: "Na tym branchu nie ma <code>kb/</code>. Przełącz się na branch nauki albo dodaj PDF-y i uruchom <code>/build-course</code>.",
+    no_kb: "Nie ma jeszcze bazy wiedzy. Dodaj PDF-y powyżej i uruchom <code>/build-course</code>.",
     b_unconverted: "nieprzekonwertowany: uruchom /build-course", b_converted: "przekonwertowany", b_outline: "konspekt",
     scanned: (n) => `zeskanowane strony: ${n}`, tr_pending: "skan: czeka na transkrypcję", tr_transcribed: "skan: przepisany",
     tr_ocr: "skan: zostawiono OCR", b_source: "strona źródła", b_wiki_built: "wiki zbudowane", b_wiki_pending: "wiki w toku",
@@ -260,7 +258,6 @@ const STR = {
     uploading: "wysyłanie…", not_pdf: "to nie PDF, pominięto", already: "już jest w library/, pominięto",
     added: (p) => `dodano jako ${p}`, failed: (s) => `błąd (HTTP ${s})`, net: "wysyłanie nie powiodło się: czy learnkb-serve nadal działa?",
     "err:host": "pliki można dodawać tylko z localhost", "err:type": "oczekiwano Content-Type: application/pdf",
-    "err:main": "main nie zawiera treści przedmiotu: najpierw przełącz się na branch learn/<przedmiot>",
     "err:name": "oczekiwano nazwy pliku .pdf", "err:size": (j) => `pusty albo większy niż ${j.max_mb} MB`,
     "err:exists": "już jest w library/", "err:short": "wysyłanie przerwane", "err:notpdf": "to nie jest plik PDF",
     "phase:parse": "parsowanie", "phase:transcribe": "transkrypcja", "phase:read": "czytanie", "phase:source": "źródło",
@@ -407,8 +404,6 @@ function renderHealth(d) {
 }
 
 function render(d) {
-  $("branch").hidden = !d.branch;
-  $("branch").textContent = d.branch ? `⎇ ${d.branch}` : "";
   $("failure").hidden = !d.failure;
   if (d.failure) $("failure").textContent = `${t("failure")}\n${d.failure}`;
   renderNow(d);

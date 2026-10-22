@@ -25,12 +25,7 @@ fi
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 command -v uv >/dev/null || fail "uv isn't installed. Install it (https://docs.astral.sh/uv/) and try again."
 
-branch=$(git branch --show-current 2>/dev/null)
-echo "Learning tool${branch:+ on branch $branch}"
-case "$branch" in
-  learn/*) ;;
-  *) echo "(No subject here: switch to a learn/<subject> branch to see its site.)" ;;
-esac
+echo "Learning tool"
 echo
 
 uv run learnkb-serve --open --port "$PORT" || fail "The server stopped with an error (see above)."

@@ -26,14 +26,12 @@ Paths are relative to the project root.
   starting, because this throws away hand-tuned files.
 
 ## Before you start
-1. **Branch.** Subject content never goes on `main`. If the current branch is `main`, stop
-   and tell the user to create `learn/<subject>` first (see CLAUDE.md).
-2. **Inputs.** `library/` must hold at least one PDF. If it is empty, stop and say
+1. **Inputs.** `library/` must hold at least one PDF. If it is empty, stop and say
    where to put them (`library/`, or drop them on http://localhost:8000/admin/).
-3. **Language.** If the user asked for a language other than English, or the PDFs are
+2. **Language.** If the user asked for a language other than English, or the PDFs are
    in another language, settle it now (ask if unclear): ingest sets `kb/site.json`, and
    the lesson and quiz stages write in the language it sets.
-4. Tell the user they can watch progress live with `uv run learnkb-serve --open --admin`.
+3. Tell the user they can watch progress live with `uv run learnkb-serve --open --admin`.
 
 ## 1. Ingest
 Follow the ingest skill end to end, including progress steps for the admin panel and
@@ -99,4 +97,3 @@ Keep it short:
 - how to start: http://localhost:8000 with `learnkb-serve` running (or double-click
   `Start learning.command` / `Start learning.bat`), and suggest the first topic in the
   curriculum
-- remind the user to commit `library/`, `kb/` and `learner/` on the learning branch

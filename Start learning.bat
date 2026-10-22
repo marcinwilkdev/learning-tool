@@ -25,10 +25,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set BRANCH=
-for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "BRANCH=%%b"
-if defined BRANCH (echo Learning tool on branch %BRANCH%) else (echo Learning tool)
-if /i not "%BRANCH:~0,6%"=="learn/" echo No subject here: switch to a learn/^<subject^> branch to see its site.
+echo Learning tool
 echo.
 
 uv run learnkb-serve --open --port %PORT%

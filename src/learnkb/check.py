@@ -28,8 +28,7 @@ REQUIRED = {
     "concept": ["title", "definition", "sources"],
     "topic": ["title", "module", "summary", "difficulty", "concepts", "sources"],
 }
-NO_KB = ("No knowledge base yet (kb/ is missing). Add PDFs to library/ and run /build-course. "
-         "On main, switch to a learning branch first (git branch --list 'learn/*').")
+NO_KB = "No knowledge base yet (kb/ is missing). Add PDFs to library/ and run /build-course."
 DIFFICULTIES = {"beginner", "intermediate", "advanced"}
 LINK = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.S)
