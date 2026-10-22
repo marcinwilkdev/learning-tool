@@ -5,8 +5,8 @@
 - `/` is the learning site from site/. It's rebuilt at start and again whenever kb/
   changes, so lessons and quizzes appear as they're written. A build that fails (a
   half-written page mid-ingest, say) keeps the last good site. Until a knowledge base is
-  built (kb/index.json, written once `learnkb-check` passes), `/` redirects to the admin
-  panel, where a new subject starts.
+  built (kb/index.json, written once `learnkb-check` passes), `/` is a welcome page
+  (welcome.html) that takes PDFs and says how to start; it turns into the site by itself.
 - `/admin/` is the admin panel (see admin.py): build progress, coverage and health, live,
   and a drop zone that adds PDFs to library/.
 - `/api/results` takes a quiz page's results and saves them as
@@ -25,6 +25,7 @@ import re
 import sys
 import threading
 import webbrowser
+from pathlib import Path
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from learnkb import admin
@@ -33,10 +34,16 @@ from learnkb.learner import LEARNER
 from learnkb.site import SITE, build
 
 INBOX = LEARNER / "inbox"
+WELCOME = Path(__file__).parent / "welcome.html"
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 ATTEMPT = re.compile(r"^[0-9T-]{10,25}$")
 MAX_BYTES = 256 * 1024
 QUIET = 1.5  # seconds without changes before the site is rebuilt
+
+def site_ready() -> bool:
+    # kb/index.json too: a site/ left over from another branch doesn't count.
+    return INDEX.exists() and (SITE / "index.html").exists()
+
 
 def say(message: str) -> None:
     # Straight to the terminal: a rebuild in another thread may be redirecting stdout.
@@ -90,22 +97,33 @@ def handler(watcher: admin.Watcher):
                 self.end_headers()
             elif path.startswith("/admin/"):
                 admin.handle_get(self, path[len("/admin/"):], watcher)
-            elif path in ("/", "/index.html") and not (INDEX.exists() and (SITE / "index.html").exists()):
-                # No knowledge base yet (or site/ is left over from another branch): start in the panel.
-                # Not cached, so / becomes the site once the wiki is built.
-                self.send_response(302)
-                self.send_header("Location", "/admin/")
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
+            elif path in ("/", "/index.html") and not site_ready():
+                self.welcome()
             else:
                 super().do_GET()
 
+        def welcome(self, head: bool = False) -> None:
+            # Not cached, so / becomes the site once the wiki is built. The header tells the
+            # page, which polls HEAD /, that it's still the welcome page.
+            body = WELCOME.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Learnkb-Welcome", "1")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if not head:
+                self.wfile.write(body)
+
         def do_HEAD(self):
             # The site asks HEAD /admin/ to decide whether to show its link to the panel.
-            if self.path.split("?")[0] in ("/admin", "/admin/"):
+            path = self.path.split("?")[0]
+            if path in ("/admin", "/admin/"):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
+            elif path in ("/", "/index.html") and not site_ready():
+                self.welcome(head=True)
             else:
                 super().do_HEAD()
 

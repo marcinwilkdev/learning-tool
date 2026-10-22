@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning tool</title>
+<style>
+:root {
+  --bg: #fbfaf7; --surface: #fff; --surface-2: #f3f1ec; --text: #1d1c1a; --muted: #6b6760;
+  --border: #e4e0d8; --accent: #c2410c; --accent-soft: #fdeee6; --good: #15803d; --good-soft: #e7f5ec;
+  --bad: #b91c1c; --radius: 14px;
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161513; --surface: #1f1e1b; --surface-2: #2a2825; --text: #ece9e2; --muted: #a39e94;
+    --border: #36332e; --accent: #fb923c; --accent-soft: #3a2418; --good: #4ade80; --good-soft: #17301f;
+    --bad: #f87171; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 var(--font); }
+main { max-width: 640px; margin: 0 auto; padding: 56px 16px 48px; }
+code { font-family: var(--mono); font-size: .86em; white-space: nowrap; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.muted { color: var(--muted); }
+
+.hero { text-align: center; margin-bottom: 36px; }
+h1 { font-size: 32px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -.01em; }
+.hero p { margin: 0 auto; max-width: 30rem; color: var(--muted); }
+
+.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+.step { position: relative; padding: 0 0 28px 48px; counter-increment: step; }
+.step::before { content: counter(step); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 14px; font-weight: 650;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.step:not(:last-child)::after { content: ""; position: absolute; left: 15px; top: 36px; bottom: 6px; width: 1px; background: var(--border); }
+.step.current::before { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step.done::before { content: "✓"; background: var(--good); border-color: var(--good); color: #fff; }
+.step h2 { font-size: 17px; margin: 2px 0 4px; }
+.step p { margin: 0; color: var(--muted); }
+.step[hidden] { display: none; }
+
+.drop { margin-top: 12px; padding: 22px 16px; text-align: center; background: var(--surface);
+  border: 2px dashed var(--border); border-radius: var(--radius); transition: background .2s, border-color .2s; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop .big { font-size: 22px; line-height: 1; margin-bottom: 6px; }
+.linkbtn { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.files { list-style: none; margin: 10px 0 0; padding: 0; font-size: 14px; }
+.files li { display: flex; gap: 8px; padding: 6px 2px; border-top: 1px solid var(--border); word-break: break-word; }
+.files li:first-child { border-top: 0; }
+.files .ok { color: var(--good); }
+.files .bad { color: var(--bad); }
+.files .status { margin-left: auto; flex: none; max-width: 55%; text-align: right; }
+.live { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; }
+.live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px;
+  background: var(--accent); animation: pulse 1.6s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+
+footer { display: flex; justify-content: center; gap: 18px; margin-top: 16px; font-size: 13px; }
+footer a, footer button { color: var(--muted); text-decoration: none; font: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+footer a:hover, footer button:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <h1 data-i18n="title">Learning tool</h1>
+    <p data-i18n="tagline"></p>
+  </header>
+
+  <ol class="steps">
+    <li class="step current" id="s-add">
+      <h2 data-i18n="add_h"></h2>
+      <p data-i18n="add_p"></p>
+      <div class="drop" id="drop">
+        <input type="file" id="pick" accept=".pdf,application/pdf" multiple hidden>
+        <div class="big" aria-hidden="true">⇪</div>
+        <div data-i18n="drop"></div>
+        <ul class="files" id="files"></ul>
+      </div>
+    </li>
+    <li class="step" id="s-build">
+      <h2 data-i18n="build_h"></h2>
+      <p data-i18n="build_p"></p>
+      <div class="live" id="live" hidden></div>
+    </li>
+    <li class="step" id="s-learn">
+      <h2 data-i18n="learn_h"></h2>
+      <p data-i18n="learn_p"></p>
+    </li>
+  </ol>
+
+  <footer>
+    <button type="button" id="lang"></button>
+    <a href="admin/" target="learnkb-admin" data-i18n="admin_link">Admin panel ↗</a>
+  </footer>
+</main>
+<script>
+// Shown at / by learnkb-serve until a knowledge base is built. It reads the admin panel's
+// live status for the PDFs and build steps, and reloads into the site once / serves it.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const STALE_MIN = 30;  // a build step older than this isn't "now" any more
+let state = null;
+const uploads = new Map();  // file name -> [class, message] for files added from this page
+
+const STR = {
+  en: {
+    title: "Learning tool", switch_to: "Polski", admin_link: "Admin panel ↗",
+    tagline: "Turn your PDFs into a course: lessons, quizzes and a record of what you've learned.",
+    add_h: "Add your PDFs",
+    add_p: "Books, notes, manuals: anything you want to learn from. They're saved to <code>library/</code>.",
+    drop: `Drop PDFs here or <button type="button" class="linkbtn" id="pick-btn">choose files</button>`,
+    build_h: "Build the course",
+    build_p: "Open Claude Code in this folder and run <code>/build-course</code>. It reads the PDFs and writes the topics, lessons and quizzes. A big book can take a while.",
+    learn_h: "Start learning",
+    learn_p: "This page turns into your course as soon as the first topics are ready. Keep it open: it switches by itself.",
+    in_library: "in library/", uploading: "uploading…", added: "added", not_pdf: "not a PDF, skipped",
+    already: "already added", failed: (s) => `failed (HTTP ${s})`, net: "upload failed: is learnkb-serve still running?",
+    building: (m) => `Building now: ${m}`,
+    "err:exists": "already added",
+    "err:notpdf": "not a PDF file", "err:size": (j) => `empty or larger than ${j.max_mb} MB`,
+  },
+  pl: {
+    title: "Narzędzie do nauki", switch_to: "English", admin_link: "Panel admina ↗",
+    tagline: "Zamień swoje PDF-y w kurs: lekcje, quizy i zapis Twoich postępów.",
+    add_h: "Dodaj swoje PDF-y",
+    add_p: "Książki, notatki, podręczniki: wszystko, z czego chcesz się uczyć. Trafiają do <code>library/</code>.",
+    drop: `Upuść PDF-y tutaj albo <button type="button" class="linkbtn" id="pick-btn">wybierz pliki</button>`,
+    build_h: "Zbuduj kurs",
+    build_p: "Otwórz Claude Code w tym folderze i uruchom <code>/build-course</code>. Przeczyta PDF-y i napisze tematy, lekcje i quizy. Duża książka może chwilę potrwać.",
+    learn_h: "Zacznij naukę",
+    learn_p: "Ta strona zmieni się w kurs, gdy tylko pierwsze tematy będą gotowe. Zostaw ją otwartą: przełączy się sama.",
+    in_library: "w library/", uploading: "wysyłanie…", added: "dodano", not_pdf: "to nie PDF, pominięto",
+    already: "już dodany", failed: (s) => `błąd (HTTP ${s})`, net: "wysyłanie nie powiodło się: czy learnkb-serve nadal działa?",
+    building: (m) => `Trwa budowanie: ${m}`,
+    "err:exists": "już dodany",
+    "err:notpdf": "to nie jest plik PDF", "err:size": (j) => `pusty albo większy niż ${j.max_mb} MB`,
+  },
+};
+const LANG_KEY = "learnkb-admin-lang";  // shared with the admin panel
+const stored = () => { try { return localStorage.getItem(LANG_KEY); } catch { return null; } };
+const pickLang = (kbLang) => [stored(), kbLang, navigator.language.slice(0, 2)].find((l) => l in STR) || "en";
+let lang = pickLang(null);
+
+function t(key, ...args) {
+  const v = STR[lang][key] ?? STR.en[key] ?? key;
+  return typeof v === "function" ? v(...args) : v;
+}
+
+function render() {
+  const docs = (state?.documents || []).filter((d) => !d.removed);
+  const step = state?.steps?.at(-1);
+  const building = step && step.phase !== "done" && (Date.now() - new Date(step.at)) / 60000 < STALE_MIN;
+
+  $("s-add").className = `step ${docs.length ? "done" : "current"}`;
+  $("s-build").className = `step ${docs.length ? "current" : ""}`;
+  $("live").hidden = !building;
+  if (building) $("live").textContent = t("building", step.message || step.phase);
+
+  // The library's PDFs, plus anything uploaded from this page that isn't in it (yet, or at all).
+  const names = docs.map((d) => d.file.normalize("NFC"));
+  const rows = names.map((n) => [n, ...(uploads.get(n) || ["ok", t("in_library")])]);
+  for (const [n, s] of uploads) if (!names.includes(n)) rows.push([n, ...s]);
+  $("files").innerHTML = rows.map(([n, cls, msg]) =>
+    `<li><span>${esc(n)}</span><span class="status ${cls}">${esc(msg)}</span></li>`).join("");
+}
+
+function applyLang(next) {
+  lang = next;
+  document.documentElement.lang = lang;
+  document.title = t("title");
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.innerHTML = t(el.dataset.i18n); });
+  $("lang").textContent = t("switch_to");
+  render();
+}
+
+$("lang").addEventListener("click", () => {
+  const next = lang === "pl" ? "en" : "pl";
+  try { localStorage.setItem(LANG_KEY, next); } catch {}
+  applyLang(next);
+});
+
+async function upload(files) {
+  const have = new Set((state?.documents || []).filter((d) => !d.removed).map((d) => d.file.normalize("NFC")));
+  for (const f of files) {
+    const name = f.name.normalize("NFC");
+    const done = (cls, msg) => { uploads.set(name, [cls, msg]); render(); };
+    if (!/\.pdf$/i.test(name)) { done("bad", t("not_pdf")); continue; }
+    if (have.has(name)) { done("bad", t("already")); continue; }
+    done("muted", t("uploading"));
+    try {
+      const r = await fetch(`admin/api/upload?name=${encodeURIComponent(f.name)}`,
+                            { method: "POST", headers: { "Content-Type": "application/pdf" }, body: f });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) done("ok", t("added"));
+      else done("bad", `err:${j.code}` in STR.en ? t(`err:${j.code}`, j) : j.error || t("failed", r.status));
+    } catch {
+      done("bad", t("net"));
+    }
+  }
+}
+
+const drop = $("drop");
+["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+drop.addEventListener("dragleave", (e) => { if (!drop.contains(e.relatedTarget)) drop.classList.remove("over"); });
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); upload([...e.dataTransfer.files]); });
+// A PDF dropped just outside the zone would otherwise replace the page with the PDF.
+["dragover", "drop"].forEach((ev) => window.addEventListener(ev, (e) => e.preventDefault()));
+// The button is re-created when the language changes, so listen on the zone.
+drop.addEventListener("click", (e) => { if (e.target.id === "pick-btn") $("pick").click(); });
+$("pick").addEventListener("change", (e) => { upload([...e.target.files]); e.target.value = ""; });
+
+const es = new EventSource("admin/api/events");  // EventSource reconnects by itself
+es.onmessage = (e) => {
+  state = JSON.parse(e.data);
+  const want = pickLang(state.lang);
+  if (want !== lang) applyLang(want); else render();
+};
+
+// The server marks this page with a header; once / answers without it, the site is ready.
+setInterval(() => {
+  fetch("./", { method: "HEAD", cache: "no-store" })
+    .then((r) => { if (r.ok && !r.headers.has("X-Learnkb-Welcome")) location.reload(); }, () => {});
+}, 3000);
+applyLang(lang);
+</script>
+</body>
+</html>
